@@ -6,12 +6,10 @@
 signalFolder := "C:\RaterHubTracker"
 signalFile   := signalFolder "\signals.txt"
 
-; Ensure folder exists
 if !DirExist(signalFolder) {
     DirCreate(signalFolder)
 }
 
-; Function to append command to signal file
 LogRaterHubSignal(cmd) {
     global signalFile
     timestamp := FormatTime(A_Now, "yyyyMMddTHHmmss")
@@ -20,19 +18,23 @@ LogRaterHubSignal(cmd) {
 }
 
 ; ---------------------------------------------------------------
-; Hotkeys (active only when Edge is active)
+; Hotkeys (only when Edge is active)
 ; ---------------------------------------------------------------
 #HotIf WinActive("ahk_exe msedge.exe")
-; If you want to restrict further to the Rater Hub tab:
-; #HotIf WinActive("Rater Hub", "ahk_exe msedge.exe")
 
-; CTRL + Q → Next question
+; Ctrl+Q → NEXT
 ^q::{
     LogRaterHubSignal("NEXT")
 }
 
-; CTRL + SHIFT + Q → End session
+; Ctrl+Alt+Q → PAUSE / RESUME toggle
+^!q::{
+    LogRaterHubSignal("PAUSE")
+}
+
+; Ctrl+Shift+Q → END session
 ^+q::{
     LogRaterHubSignal("EXIT")
 }
+
 #HotIf
