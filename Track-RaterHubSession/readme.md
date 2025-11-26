@@ -18,7 +18,7 @@ Tracks RaterHub sessions using PowerShell 7 + AutoHotkey v2:
 
 ## Start a live session
 ```powershell
-pwsh C:\Scripts\RaterHubTracker.ps1 -LaunchEdgeIfNeeded
+pwsh C:\Scripts\Track-RaterHubSession.ps1 -LaunchEdgeIfNeeded
 ```
 
 ## End-of-day daily report
