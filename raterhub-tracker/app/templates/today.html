@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}RaterHub – Today{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Today's RaterHub Sessions 💜</h1>
+    <div class="subtitle">
+        Date: <strong>{{ summary.date.strftime("%Y-%m-%d") }}</strong>
+        &mdash; User: <strong>{{ summary.user_external_id }}</strong>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-item">
+            <div class="summary-label">Total Sessions</div>
+            <div class="summary-value em">{{ summary.total_sessions }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Questions</div>
+            <div class="summary-value">{{ summary.total_questions }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Active Time</div>
+            <div class="summary-value em">{{ summary.total_active_mmss }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Session Breakdown</h2>
+
+    {% if summary.sessions|length == 0 %}
+        <p class="subtitle">No sessions recorded yet today.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Session ID</th>
+                    <th>Status</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th># Questions</th>
+                    <th>Avg Time (mm:ss)</th>
+                    <th>Total Active (mm:ss)</th>
+                    <th>Pace</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for s in summary.sessions %}
+                <tr>
+                    <td>
+			<a href="/dashboard/sessions/{{ s.session_id }}?user={{ summary.user_external_id }}" target="_blank">
+			    {{ s.session_id[:8] }}…
+			</a>
+                    </td>
+                    <td>
+                        {% if s.is_active %}
+                            <span class="pill">Active</span>
+                        {% else %}
+                            <span class="pill" style="background:#e8f5e9;color:#2e7d32;">Finished</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ s.started_at }}</td>
+                    <td>{{ s.ended_at or "—" }}</td>
+                    <td style="text-align:center;">{{ s.total_questions }}</td>
+                    <td style="text-align:center;">{{ s.avg_active_mmss }}</td>
+                    <td style="text-align:center;">{{ (s.total_active_seconds | float) | round(0) | int | string | replace("", "") }}</td>
+                    <td style="text-align:center;">{{ s.pace_emoji }} {{ s.pace_label }}</td>
+                    <td style="text-align:center;">{{ s.score }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="footer-note">
+            Times are based on <strong>active</strong> time only (pauses excluded).  
+            Pace & score are measured against your per-session target (default 5.5 minutes per question).
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}RaterHub – Session {{ summary.session_id[:8] }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1>Session Details 💜</h1>
+    <div class="subtitle">
+        Session: <strong>{{ summary.session_id }}</strong><br>
+        User: <strong>{{ summary.user_external_id }}</strong><br>
+        Started: <strong>{{ summary.started_at }}</strong><br>
+        Ended: <strong>{{ summary.ended_at or "In progress" }}</strong>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-item">
+            <div class="summary-label">Questions</div>
+            <div class="summary-value em">{{ summary.total_questions }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Active Time</div>
+            <div class="summary-value em">{{ summary.avg_active_mmss if summary.total_questions == 0 else summary.total_active_seconds | round(0) ~ " s" }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Average Time / Question</div>
+            <div class="summary-value">{{ summary.avg_active_mmss }}</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Pace vs Target</div>
+            <div class="summary-value">{{ summary.pace_emoji }} {{ summary.pace_label }}</div>
+            <div class="pace-label">
+                Target: {{ "%.1f"|format(summary.target_minutes_per_question) }} min / question
+            </div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Session Score</div>
+            <div class="summary-value">{{ summary.score }}/100</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Per-Question Timing</h2>
+
+    {% if summary.questions|length == 0 %}
+        <p class="subtitle">No completed questions in this session yet.</p>
+    {% else %}
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th>Active Time (mm:ss)</th>
+                    <th>Raw Time (s)</th>
+                    <th>Vs Target</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for q in summary.questions %}
+                <tr>
+                    <td style="text-align:center;">{{ q.index }}</td>
+                    <td>{{ q.started_at }}</td>
+                    <td>{{ q.ended_at }}</td>
+                    <td style="text-align:center;">{{ q.active_mmss }}</td>
+                    <td style="text-align:center;">{{ q.raw_seconds | round(1) }}</td>
+                    <td style="text-align:center;">
+                        {% if q.over_under_target_seconds is none %}
+                            —
+                        {% else %}
+                            {% if q.over_under_target_seconds > 0 %}
+                                +{{ q.over_under_target_mmss }} slower
+                            {% elif q.over_under_target_seconds < 0 %}
+                                -{{ q.over_under_target_mmss }} faster
+                            {% else %}
+                                on target
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="footer-note">
+            "Active time" excludes periods where the session was paused.  
+            Comparisons are made against your target of {{ "%.1f"|format(summary.target_minutes_per_question) }} minutes per question.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

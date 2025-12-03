@@ -1,5 +1,5 @@
 param(
-    [string]$OutputFolder = "$env:USERPROFILE\Documents\RaterHubTracker",
+    [string]$OutputFolder = "$env:USERPROFILE\OneDrive\Documents\RaterHubTracker",
     [switch]$LaunchEdgeIfNeeded,
     [double]$TargetMinutesPerQuestion = 5.5  # AHT target (5.5 min per spec for Severity tasks)
 )
@@ -84,7 +84,7 @@ Write-Host "Signal file: $SignalFile"
 Write-Host "Hotkeys:"
 Write-Host "  Ctrl+Q         → NEXT question"
 Write-Host "  Ctrl+Alt+Q     → PAUSE / RESUME"
-Write-Host "  Ctrl+Shift+Q   → END session" -ForegroundColor Yellow
+Write-Host "  Ctrl+Shift+Q   → END session" -ForegroundColor Magenta
 Write-Host ""
 
 # -----------------------------
@@ -101,7 +101,7 @@ $isPaused             = $false
 $pauseStart           = $null
 $pauseOffsetSeconds   = 0.0   # accumulated paused time for current question
 
-Write-Host ("Question {0} started at {1}" -f $questionNumber, $questionStart) -ForegroundColor Yellow
+Write-Host ("Question {0} started at {1}" -f $questionNumber, $questionStart) -ForegroundColor Magenta
 
 # -----------------------------
 # Main loop: watch for signals
@@ -123,7 +123,7 @@ while (-not $sessionEnded) {
                             if (-not $isPaused) {
                                 $isPaused   = $true
                                 $pauseStart = Get-Date
-                                Write-Host "[SIGNAL] PAUSE → timing paused" -ForegroundColor DarkYellow
+                                Write-Host "[SIGNAL] PAUSE → timing paused" -ForegroundColor DarkMagenta
                             }
                             else {
                                 # resume and accumulate paused time first
@@ -133,7 +133,7 @@ while (-not $sessionEnded) {
                                 }
                                 $pauseStart = $null
                                 $isPaused   = $false
-                                Write-Host "[SIGNAL] PAUSE → resumed" -ForegroundColor DarkYellow
+                                Write-Host "[SIGNAL] PAUSE → resumed" -ForegroundColor DarkMagenta
                             }
                         }
 
@@ -166,7 +166,7 @@ while (-not $sessionEnded) {
 
                             $questionNumber++
                             $questionStart = Get-Date
-                            Write-Host ("Question {0} started at {1}" -f $questionNumber, $questionStart) -ForegroundColor Yellow
+                            Write-Host ("Question {0} started at {1}" -f $questionNumber, $questionStart) -ForegroundColor Magenta
                         }
 
                         'EXIT' {
@@ -198,7 +198,7 @@ while (-not $sessionEnded) {
                         }
 
                         default {
-                            Write-Host "[WARN] Unknown signal received: '$clean'" -ForegroundColor DarkYellow
+                            Write-Host "[WARN] Unknown signal received: '$clean'" -ForegroundColor DarkMagenta
                         }
                     }
                 }
@@ -213,7 +213,7 @@ while (-not $sessionEnded) {
 }
 
 if ($questions.Count -eq 0) {
-    Write-Host "No questions recorded; skipping CSV & HTML." -ForegroundColor Yellow
+    Write-Host "No questions recorded; skipping CSV & HTML." -ForegroundColor Magenta
     return
 }
 
