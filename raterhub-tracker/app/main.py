@@ -660,9 +660,18 @@ def recent_sessions(
 # Today summary logic
 # ============================================================
 
-def build_today_summary(db: OrmSession, user: User) -> TodaySummary:
-    now = datetime.utcnow()
-    day_start = datetime(now.year, now.month, now.day)
+from datetime import datetime, timedelta
+
+def build_day_summary(
+    db: OrmSession,
+    user: User,
+    target_date: datetime,
+) -> TodaySummary:
+    """
+    Build a summary for a given calendar date (UTC).
+    `target_date` should be a datetime for that day (time part is ignored).
+    """
+    day_start = datetime(target_date.year, target_date.month, target_date.day)
     day_end = day_start + timedelta(days=1)
 
     sessions = (
@@ -723,7 +732,7 @@ def build_today_summary(db: OrmSession, user: User) -> TodaySummary:
 
         total_active = sum(q.active_seconds for q in qs)
         count = len(qs)
-        avg_active = total_active / count
+        avg_active = total_active / count if count else 0.0
 
         pace = compute_pace(avg_active, s.target_minutes_per_question or 5.5)
 
@@ -784,7 +793,7 @@ def get_sessions_for_day(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
 
-    return build_today_summary(db, current_user, target_date)
+    return build_day_summary(db, current_user, target_date)
 
 
 @app.get("/dashboard/today", response_class=HTMLResponse)
