@@ -9,6 +9,7 @@ from fastapi import (
     Request,
     Form,
     Cookie,
+    Query,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -760,24 +761,56 @@ def build_today_summary(db: OrmSession, user: User) -> TodaySummary:
 # ============================================================
 
 @app.get("/sessions/today", response_model=TodaySummary)
-def get_today_sessions(
+def get_day_sessions(
+    date: Optional[str] = Query(
+        default=None,
+        description="Optional date in YYYY-MM-DD (UTC). If omitted, uses today."
+    ),
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
-    return build_today_summary(db, current_user)
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        target_date = None  # build_day_summary will default to today
 
+    return build_day_summary(db, current_user, target_date)
 
 @app.get("/dashboard/today", response_class=HTMLResponse)
 def dashboard_today(
     request: Request,
+    date: Optional[str] = Query(
+        default=None,
+        description="Optional date in YYYY-MM-DD (UTC). If omitted, uses today."
+    ),
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
-    summary = build_today_summary(db, current_user)
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            # Simple 400; you could render a nicer error in HTML if you like
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        target_date = None
+
+    summary = build_day_summary(db, current_user, target_date)
+    # Pass the selected date string back for the date picker
+    selected_date_str = summary.date.strftime("%Y-%m-%d") if summary.date else ""
+
     return templates.TemplateResponse(
         "today.html",
-        {"request": request, "summary": summary},
+        {
+            "request": request,
+            "summary": summary,
+            "selected_date": selected_date_str,
+        },
     )
+
 
 # ============================================================
 # Admin Debug: User Sessions 
