@@ -1,6 +1,5 @@
-# app/main.py
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import (
     FastAPI,
@@ -17,7 +16,6 @@ from fastapi.templating import Jinja2Templates
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy import and_
 
 from .database import SessionLocal, engine
 from .db_models import Base, User, Session as DbSession, Event, Question
@@ -47,26 +45,31 @@ from .auth import (
 app = FastAPI(
     title="RaterHub Tracker API",
     description="Backend for timing and scoring RaterHub rating sessions.",
-    version="0.3.0",
+    version="0.5.1",
 )
 
 Base.metadata.create_all(bind=engine)
 
 templates = Jinja2Templates(directory="app/templates")
 
-# CORS (will lock down later)
+# CORS – allow your UI, API, and RaterHub origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO tighten later
+    allow_origins=[
+        "https://raterhub.steigenga.com",
+        "https://api.raterhub.steigenga.com",
+        "https://raterhub.com",
+        "https://www.raterhub.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-security = HTTPBearer(auto_error=False)   # allow missing header for cookie fallback
+security = HTTPBearer(auto_error=False)  # allow missing header, fallback to cookie
 
 # ============================================================
-# Database dependency
+# DB dependency
 # ============================================================
 
 def get_db():
@@ -91,6 +94,9 @@ def format_mmss(seconds: float) -> str:
 
 
 def compute_pace(avg_seconds: float, target_minutes: float):
+    """
+    Compute pace label/emoji/score based on average time vs target.
+    """
     target_seconds = target_minutes * 60
     if avg_seconds <= 0 or target_seconds <= 0:
         return {
@@ -116,9 +122,7 @@ def compute_pace(avg_seconds: float, target_minutes: float):
         pace_label, pace_emoji = "slow", "🐌"
 
     import math
-    score = round(
-        max(0, min(100, 100 * math.exp(-1.2 * abs(ratio - 1))))
-    )
+    score = round(max(0, min(100, 100 * math.exp(-1.2 * abs(ratio - 1)))))
 
     return {
         "pace_label": pace_label,
@@ -128,7 +132,7 @@ def compute_pace(avg_seconds: float, target_minutes: float):
     }
 
 # ============================================================
-# Auth: header or cookie
+# Auth: current user via header or cookie
 # ============================================================
 
 def get_current_user(
@@ -136,7 +140,6 @@ def get_current_user(
     access_token: Optional[str] = Cookie(default=None),
     db: OrmSession = Depends(get_db),
 ) -> User:
-
     token = None
 
     if credentials and credentials.scheme.lower() == "bearer":
@@ -161,19 +164,36 @@ def get_current_user(
     return user
 
 # ============================================================
-# Health check
+# Root & health
 # ============================================================
 
 @app.get("/health", response_model=HealthStatus)
 def health() -> HealthStatus:
     return HealthStatus(status="ok", timestamp=datetime.utcnow())
 
+
+@app.get("/", response_class=HTMLResponse)
+def root(
+    request: Request,
+    access_token: Optional[str] = Cookie(default=None),
+):
+    """
+    Smart landing:
+    - If user has a valid JWT cookie → /dashboard/today
+    - Otherwise → /login
+    """
+    if access_token:
+        payload = decode_access_token(access_token)
+        if payload is not None:
+            return RedirectResponse(url="/dashboard/today", status_code=303)
+    return RedirectResponse(url="/login", status_code=303)
+
 # ============================================================
-# Auth endpoints
+# Auth endpoints (API-style)
 # ============================================================
 
 @app.post("/auth/register", response_model=Token)
-def register(user_in: UserCreate, db: OrmSession = Depends(get_db)):
+def register_api(user_in: UserCreate, db: OrmSession = Depends(get_db)):
     exists = db.query(User).filter(User.email == user_in.email).first()
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -197,7 +217,7 @@ def register(user_in: UserCreate, db: OrmSession = Depends(get_db)):
 
 
 @app.post("/auth/login", response_model=Token)
-def login(user_in: UserLogin, db: OrmSession = Depends(get_db)):
+def login_api(user_in: UserLogin, db: OrmSession = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -211,20 +231,43 @@ def login(user_in: UserLogin, db: OrmSession = Depends(get_db)):
     token = create_access_token(user=user)
     return Token(access_token=token)
 
-@app.get("/logout")
-def logout(request: Request):
-    """
-    Logout for browser-based dashboard access.
+# ============================================================
+# HTML login / logout / register (browser flow)
+# ============================================================
 
-    - Clears the 'access_token' cookie
-    - Redirects to /login
-    """
-    response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie(
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/login")
+def login_web(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    db: OrmSession = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Invalid email or password", "email": email},
+            status_code=400,
+        )
+
+    token = create_access_token(user=user)
+
+    response = RedirectResponse(url="/dashboard/today", status_code=303)
+    response.set_cookie(
         key="access_token",
+        value=token,
+        httponly=True,
         samesite="lax",
+        max_age=60 * 60 * 24,
     )
     return response
+
+
 @app.get("/register", response_class=HTMLResponse)
 def register_form(request: Request):
     """
@@ -232,7 +275,7 @@ def register_form(request: Request):
     """
     return templates.TemplateResponse(
         "register.html",
-        {"request": request}
+        {"request": request},
     )
 
 
@@ -300,44 +343,67 @@ def register_web(
     return response
 
 
-# ============================================================
-# HTML login for dashboard
-# ============================================================
-
-@app.get("/login", response_class=HTMLResponse)
-def login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+@app.get("/logout")
+def logout(request: Request):
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="access_token", samesite="lax")
+    return response
 
 
-@app.post("/login")
-def login_web(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    db: OrmSession = Depends(get_db),
-):
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Invalid email or password"},
-            status_code=400,
-        )
-
-    token = create_access_token(user=user)
-
-    response = RedirectResponse(url="/dashboard/today", status_code=303)
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="lax",
-        max_age=60 * 60 * 24,
-    )
+@app.post("/logout")
+def logout_post(request: Request):
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(key="access_token", samesite="lax")
     return response
 
 # ============================================================
-# Event ingestion (/events)
+# /me and helper endpoints
+# ============================================================
+
+@app.get("/me")
+def me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "external_id": current_user.external_id,
+        "created_at": current_user.created_at,
+        "last_login_at": current_user.last_login_at,
+        "is_active": current_user.is_active,
+    }
+
+
+@app.get("/sessions/recent")
+def recent_sessions(
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+):
+    if limit < 1:
+        limit = 1
+    if limit > 100:
+        limit = 100
+
+    sessions = (
+        db.query(DbSession)
+        .filter(DbSession.user_id == current_user.id)
+        .order_by(DbSession.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        {
+            "session_id": s.public_id,
+            "started_at": s.started_at,
+            "ended_at": s.ended_at,
+            "is_active": s.is_active,
+            "current_question_index": s.current_question_index,
+        }
+        for s in sessions
+    ]
+
+# ============================================================
+# Event ingestion (/events) – NEXT / PAUSE / EXIT / UNDO
 # ============================================================
 
 @app.post("/events", response_model=EventOut)
@@ -347,11 +413,11 @@ def post_event(
     db: OrmSession = Depends(get_db),
 ) -> EventOut:
     """
-    Receive a NEXT/PAUSE/EXIT/UNDO event from the client and update:
+    Receive a NEXT/PAUSE/EXIT/UNDO event and update:
     - User's active session
     - Events table
     - Questions table (for NEXT/EXIT)
-    - Session state (including UNDO of last question)
+    - Session state (UNDO rolls back last question)
     """
     now = datetime.utcnow()
     ts = event.timestamp
@@ -376,23 +442,20 @@ def post_event(
         .first()
     )
 
-    if session is None:
-        session = DbSession(
-            user_id=user.id,
-            started_at=ts,
-            is_active=True,
-            target_minutes_per_question=5.5,
-            current_question_index=1,
-            current_question_started_at=ts,
-            pause_accumulated_seconds=0.0,
-            is_paused=False,
-            pause_started_at=None,
-        )
-        db.add(session)
-        db.commit()
-        db.refresh(session)
+if session is None:
+    session = DbSession(
+        user_id=user.id,
+        started_at=ts,
+        is_active=True,
+        target_minutes_per_question=5.5,
+        current_question_index=1,
+        current_question_started_at=None,  # <— was ts
+        pause_accumulated_seconds=0.0,
+        is_paused=False,
+        pause_started_at=None,
+    )
 
-    # Always record the event itself
+    # Record the event itself
     db.add(Event(session_id=session.id, type=event.type, timestamp=ts))
 
     last_q_active: Optional[float] = None
@@ -424,23 +487,21 @@ def post_event(
         )
 
         if last_q is not None:
-            # Rebuild pause time from stored raw/active
             old_pause = (last_q.raw_seconds or 0.0) - (last_q.active_seconds or 0.0)
             if old_pause < 0:
                 old_pause = 0.0
 
-            # Restore session state to just before the NEXT that closed this question
             session.current_question_index = last_q.index
             session.current_question_started_at = last_q.started_at
             session.pause_accumulated_seconds = old_pause
             session.is_paused = False
             session.pause_started_at = None
 
-            # Delete the question row; we’re treating that NEXT as a mistake
             db.delete(last_q)
 
+    # ----- NEXT / EXIT -----
     elif event.type in ("NEXT", "EXIT"):
-        # How many questions already stored for this session?
+        # Count existing questions for this session
         question_count = (
             db.query(Question)
             .filter(Question.session_id == session.id)
@@ -449,14 +510,17 @@ def post_event(
 
         # Special case: first NEXT of a brand-new session
         # → just start timing Q1, do NOT create a 0-second question row.
-        if event.type == "NEXT" and question_count == 0:
-            session.current_question_started_at = ts
-            session.pause_accumulated_seconds = 0.0
-            session.is_paused = False
-            session.pause_started_at = None
+        event.type == "NEXT"
+        and question_count == 0
+        and session.current_question_started_at is None
+    ):
+        session.current_question_started_at = ts
+        session.pause_accumulated_seconds = 0.0
+        session.is_paused = False
+        session.pause_started_at = None
 
-        else:
-            # Close any active pause interval
+    else:
+        # Close any active pause interval        ...
             if session.is_paused and session.pause_started_at is not None:
                 delta = (ts - session.pause_started_at).total_seconds()
                 if delta > 0:
@@ -503,11 +567,8 @@ def post_event(
                 session.is_paused = False
                 session.pause_started_at = None
 
-
-    # Persist all changes
     db.commit()
 
-    # Count questions AFTER any NEXT/UNDO/EXIT changes
     total_questions = (
         db.query(Question)
         .filter(Question.session_id == session.id)
@@ -530,10 +591,10 @@ def post_event(
     )
 
 # ============================================================
-# Session summary logic
+# Session summary (single session)
 # ============================================================
 
-def build_session_summary(db: OrmSession, user: User, session_public_id: str):
+def build_session_summary(db: OrmSession, user: User, session_public_id: str) -> SessionSummary:
     session = (
         db.query(DbSession)
         .filter(DbSession.public_id == session_public_id, DbSession.user_id == user.id)
@@ -578,7 +639,7 @@ def build_session_summary(db: OrmSession, user: User, session_public_id: str):
         session.target_minutes_per_question or 5.5,
     )
 
-    question_summaries = []
+    question_summaries: List[SessionQuestionSummary] = []
     target_seconds = (session.target_minutes_per_question or 5.5) * 60
 
     for q in questions:
@@ -614,36 +675,6 @@ def build_session_summary(db: OrmSession, user: User, session_public_id: str):
         questions=question_summaries,
     )
 
-from fastapi.responses import HTMLResponse, RedirectResponse
-from typing import Optional
-from fastapi import Cookie, Request
-
-# ============================================================
-# UI: Home Page
-# ============================================================
-
-@app.get("/", response_class=HTMLResponse)
-def root(
-    request: Request,
-    access_token: Optional[str] = Cookie(default=None),
-):
-    """
-    Smart landing:
-    - If user already has a valid JWT cookie, send them to today's dashboard.
-    - Otherwise, send them to the login page.
-    """
-    if access_token:
-        payload = decode_access_token(access_token)
-        if payload is not None:
-            # Looks like a valid token
-            return RedirectResponse(url="/dashboard/today", status_code=303)
-
-    # No token or invalid token → go to login
-    return RedirectResponse(url="/login", status_code=303)
-
-# ============================================================
-# Session summary: JSON + HTML
-# ============================================================
 
 @app.get("/sessions/{session_public_id}/summary", response_model=SessionSummary)
 def get_session_summary(
@@ -668,84 +699,8 @@ def dashboard_session(
     )
 
 # ============================================================
-# Admin: THE FUCKING DASHBOARD!!!!!
+# Day summary (today or any date)
 # ============================================================
-
-
-@app.get("/admin/dashboard", response_class=HTMLResponse)
-def admin_dashboard(
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: OrmSession = Depends(get_db),
-):
-    """
-    Admin/debug dashboard for the current user.
-    Lists recent sessions and loads raw event logs inline.
-    """
-    # Fetch recent sessions (reuse your logic)
-    sessions = (
-        db.query(DbSession)
-        .filter(DbSession.user_id == current_user.id)
-        .order_by(DbSession.started_at.desc())
-        .limit(20)
-        .all()
-    )
-
-    # Render the base HTML; details are loaded via JS fetch() calls
-    return templates.TemplateResponse(
-        "admin_dashboard.html",
-        {
-            "request": request,
-            "sessions": sessions,
-            "user": current_user,
-        },
-    )
-
-
-
-# ============================================================
-# Debug: Recent Sessions 
-# ============================================================
-
-@app.get("/sessions/recent")
-def recent_sessions(
-    limit: int = 10,
-    current_user: User = Depends(get_current_user),
-    db: OrmSession = Depends(get_db),
-):
-    """
-    List the current user's most recent sessions (up to `limit`).
-    Good for a 'recent sessions' list in the UI.
-    """
-    if limit < 1:
-        limit = 1
-    if limit > 100:
-        limit = 100
-
-    sessions = (
-        db.query(DbSession)
-        .filter(DbSession.user_id == current_user.id)
-        .order_by(DbSession.started_at.desc())
-        .limit(limit)
-        .all()
-    )
-
-    return [
-        {
-            "session_id": s.public_id,
-            "started_at": s.started_at,
-            "ended_at": s.ended_at,
-            "is_active": s.is_active,
-            "current_question_index": s.current_question_index,
-        }
-        for s in sessions
-    ]
-
-# ============================================================
-# Today summary logic
-# ============================================================
-
-from datetime import datetime, timedelta
 
 def build_day_summary(
     db: OrmSession,
@@ -754,7 +709,6 @@ def build_day_summary(
 ) -> TodaySummary:
     """
     Build a summary for a given calendar date (UTC).
-    `target_date` should be a datetime for that day (time part is ignored).
     """
     day_start = datetime(target_date.year, target_date.month, target_date.day)
     day_end = day_start + timedelta(days=1)
@@ -784,7 +738,7 @@ def build_day_summary(
     total_sessions = 0
     total_questions_all = 0
     total_active_all = 0.0
-    items = []
+    items: List[TodaySessionItem] = []
 
     for s in sessions:
         qs = (
@@ -850,43 +804,12 @@ def build_day_summary(
         sessions=items,
     )
 
-# ============================================================
-# Today summary: JSON + HTML
-# ============================================================
 
 @app.get("/sessions/today", response_model=TodaySummary)
-def get_today_sessions(
-    current_user: User = Depends(get_current_user),
-    db: OrmSession = Depends(get_db),
-):
-    # Always "today" (UTC) for this endpoint
-    return build_today_summary(db, current_user, target_date=None)
-
-
-@app.get("/sessions/day", response_model=TodaySummary)
-def get_sessions_for_day(
-    date: str = Query(..., description="Date in YYYY-MM-DD (UTC)"),
-    current_user: User = Depends(get_current_user),
-    db: OrmSession = Depends(get_db),
-):
-    """
-    Get summary for a specific calendar day (UTC).
-    Example: /sessions/day?date=2025-12-03
-    """
-    try:
-        target_date = datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
-
-    return build_day_summary(db, current_user, target_date)
-
-
-@app.get("/dashboard/today", response_class=HTMLResponse)
-def dashboard_today(
-    request: Request,
+def get_day_sessions(
     date: Optional[str] = Query(
         default=None,
-        description="Optional date in YYYY-MM-DD (UTC). If omitted, uses today."
+        description="Optional date in YYYY-MM-DD (UTC). If omitted, uses today.",
     ),
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
@@ -897,7 +820,30 @@ def dashboard_today(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
     else:
-        target_date = None  # treat as "today"
+        now = datetime.utcnow()
+        target_date = datetime(now.year, now.month, now.day)
+
+    return build_day_summary(db, current_user, target_date)
+
+
+@app.get("/dashboard/today", response_class=HTMLResponse)
+def dashboard_today(
+    request: Request,
+    date: Optional[str] = Query(
+        default=None,
+        description="Optional date in YYYY-MM-DD (UTC). If omitted, uses today.",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+):
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        now = datetime.utcnow()
+        target_date = datetime(now.year, now.month, now.day)
 
     summary = build_day_summary(db, current_user, target_date)
     selected_date_str = summary.date.strftime("%Y-%m-%d") if summary.date else ""
@@ -912,7 +858,7 @@ def dashboard_today(
     )
 
 # ============================================================
-# Admin Debug: User Sessions 
+# Admin debug endpoints + HTML dashboard
 # ============================================================
 
 @app.get("/admin/debug/user-sessions")
@@ -920,12 +866,6 @@ def debug_user_sessions(
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
-    """
-    Debug endpoint: list this user's sessions with basic info.
-
-    - Useful to verify that events are creating sessions as expected.
-    - Currently scoped to the authenticated user (no global admin view yet).
-    """
     sessions = (
         db.query(DbSession)
         .filter(DbSession.user_id == current_user.id)
@@ -944,9 +884,6 @@ def debug_user_sessions(
         for s in sessions
     ]
 
-# ============================================================
-# Admin Debug: User Sessions (shows raw event stream of your session) 
-# ============================================================
 
 @app.get("/admin/debug/user-events/{session_public_id}")
 def debug_user_events(
@@ -954,12 +891,6 @@ def debug_user_events(
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
-    """
-    Debug endpoint: show the raw events for one of the current user's sessions.
-
-    This is scoped to the authenticated user:
-    - You can only see events for your own sessions.
-    """
     session = (
         db.query(DbSession)
         .filter(
@@ -987,3 +918,27 @@ def debug_user_events(
         }
         for e in events
     ]
+
+
+@app.get("/admin/dashboard", response_class=HTMLResponse)
+def admin_dashboard(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+):
+    sessions = (
+        db.query(DbSession)
+        .filter(DbSession.user_id == current_user.id)
+        .order_by(DbSession.started_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        "admin_dashboard.html",
+        {
+            "request": request,
+            "sessions": sessions,
+            "user": current_user,
+        },
+    )
