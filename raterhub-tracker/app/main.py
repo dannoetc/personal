@@ -225,6 +225,79 @@ def logout(request: Request):
         samesite="lax",
     )
     return response
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request):
+    """
+    Show a simple registration form for creating a local account.
+    """
+    return templates.TemplateResponse(
+        "register.html",
+        {"request": request}
+    )
+
+
+@app.post("/register")
+def register_web(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+    db: OrmSession = Depends(get_db),
+):
+    """
+    Handle registration via HTML form:
+    - Validates passwords match
+    - Ensures email is not already registered
+    - Creates user, logs them in, sets cookie
+    """
+    if password != password_confirm:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "error": "Passwords do not match.",
+                "email": email,
+            },
+            status_code=400,
+        )
+
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        return templates.TemplateResponse(
+            "register.html",
+            {
+                "request": request,
+                "error": "That email is already registered.",
+                "email": email,
+            },
+            status_code=400,
+        )
+
+    now = datetime.utcnow()
+    user = User(
+        external_id=email,
+        email=email,
+        created_at=now,
+        last_login_at=now,
+        password_hash=get_password_hash(password),
+        auth_provider="local",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_access_token(user=user)
+
+    response = RedirectResponse(url="/dashboard/today", status_code=303)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24,
+    )
+    return response
 
 
 # ============================================================

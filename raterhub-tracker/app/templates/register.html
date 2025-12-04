@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Create Account – RaterHub Tracker</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #f7f4ff;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 24px 26px;
+            width: 320px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border: 1px solid #e5defa;
+        }
+
+        h1 {
+            margin: 0 0 4px 0;
+            font-size: 20px;
+            color: #4b3b86;
+        }
+
+        .subtitle {
+            margin: 0 0 16px 0;
+            font-size: 13px;
+            color: #7a748f;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 4px;
+            color: #4b3b86;
+        }
+
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 7px 9px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+
+        button[type="submit"] {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 999px;
+            border: none;
+            background: #6c5ce7;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 4px;
+        }
+
+        button[type="submit"]:hover {
+            background: #5a4ad7;
+        }
+
+        .error {
+            background: #ffecec;
+            color: #c0392b;
+            font-size: 12px;
+            padding: 6px 8px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .footer {
+            margin-top: 10px;
+            font-size: 12px;
+            text-align: center;
+            color: #7a748f;
+        }
+
+        .footer a {
+            color: #6c5ce7;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>Create account</h1>
+    <p class="subtitle">Sign up to start tracking your RaterHub sessions.</p>
+
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/register">
+        <label for="email">Email</label>
+        <input
+            type="email"
+            id="email"
+            name="email"
+            required
+            value="{{ email or '' }}"
+        >
+
+        <label for="password">Password</label>
+        <input
+            type="password"
+            id="password"
+            name="password"
+            required
+        >
+
+        <label for="password_confirm">Confirm password</label>
+        <input
+            type="password"
+            id="password_confirm"
+            name="password_confirm"
+            required
+        >
+
+        <button type="submit">Create account</button>
+    </form>
+
+    <div class="footer">
+        Already have an account?
+        <a href="/login">Log in</a>
+    </div>
+</div>
+</body>
+</html>
