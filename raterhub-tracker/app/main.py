@@ -528,6 +528,33 @@ def build_session_summary(db: OrmSession, user: User, session_public_id: str):
         questions=question_summaries,
     )
 
+from fastapi.responses import HTMLResponse, RedirectResponse
+from typing import Optional
+from fastapi import Cookie, Request
+
+# ============================================================
+# UI: Home Page
+# ============================================================
+
+@app.get("/", response_class=HTMLResponse)
+def root(
+    request: Request,
+    access_token: Optional[str] = Cookie(default=None),
+):
+    """
+    Smart landing:
+    - If user already has a valid JWT cookie, send them to today's dashboard.
+    - Otherwise, send them to the login page.
+    """
+    if access_token:
+        payload = decode_access_token(access_token)
+        if payload is not None:
+            # Looks like a valid token
+            return RedirectResponse(url="/dashboard/today", status_code=303)
+
+    # No token or invalid token → go to login
+    return RedirectResponse(url="/login", status_code=303)
+
 # ============================================================
 # Session summary: JSON + HTML
 # ============================================================
