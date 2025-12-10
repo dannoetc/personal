@@ -46,9 +46,9 @@ from .config import settings
 # ============================================================
 
 app = FastAPI(
-    title=settings.API_TITLE,
-    description=settings.API_DESCRIPTION,
-    version=settings.API_VERSION,
+    title=settings.PROJECT_NAME,
+    description="Backend for timing and scoring RaterHub rating sessions.",
+    version=settings.VERSION,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -76,12 +76,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-# ============================================================
-# Everything else remains unchanged below this line
-# ============================================================
-
-# (Your existing endpoint and helper function code goes here unchanged)
 
 # ============================================================
 # Utility helpers
