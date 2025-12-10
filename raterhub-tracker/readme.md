@@ -89,6 +89,57 @@ ALLOWED_ORIGINS=https://raterhub.com,https://www.raterhub.com
 ## 📃 Documentation
 
 You can visit `/docs` when running locally to access the FastAPI auto-generated API docs.
+## TODO: Production Hardening & Cleanup
+
+The following items remain before the application is considered production-ready and stable for self-hosting or open-source distribution:
+
+### ✅ Completed
+- [x] Environment-based config externalized via `config.py` and `.env`
+- [x] Secure password hashing (bcrypt via `passlib`)
+- [x] JWT-based auth with configurable expiry
+- [x] UI widget (TamperMonkey) with backend session sync and active timers
+- [x] Rate limiting via `slowapi`
+- [x] Dockerfile and Docker Compose for self-contained deployment
+- [x] Per-user timezone support
+- [x] Session and question deletion
+- [x] Session locking to prevent invalid sequences
+- [x] RESTful API and HTML dashboard views
+- [x] Complete pinned `requirements.txt`
+
+### 🔒 Security & Access Control
+- [ ] Add email verification for registration flow
+- [ ] Prevent reuse of known weak passwords
+- [ ] Add optional admin-only registration or invite-only flag
+- [ ] Implement brute-force protection beyond rate limiting (e.g. exponential backoff)
+- [ ] Sanitize and validate user input more rigorously
+
+### 📈 Observability
+- [ ] Add logging (file + console, configurable level via env)
+- [ ] Add healthcheck endpoint for container orchestrators
+- [ ] Add metrics or Prometheus-compatible exporter for event tracking
+
+### 🧪 Testing & QA
+- [ ] Add unit tests for auth, event handling, and DB logic
+- [ ] Add a minimal integration test script (pytest + HTTPX)
+- [ ] Add a test harness for widget → backend interaction
+
+### 💅 UX Polish
+- [ ] Add password reset flow (via email or temporary token)
+- [ ] Add profile settings for AHT customization per user
+- [ ] Localize time and duration display in the widget more clearly
+- [ ] Improve error display in HTML login/register forms
+
+### 🔧 Deployment & Tooling
+- [ ] Add `.dockerignore`
+- [ ] Add sample `nginx` config for SSL proxying
+- [ ] Add Makefile for setup/dev/test helpers
+- [ ] Add GitHub Actions CI for linting/tests
+
+### 📚 Documentation
+- [ ] Add full setup guide to `README.md` (Quickstart, .env, Docker)
+- [ ] Add API docs (OpenAPI is available, but summarize common endpoints)
+- [ ] Add user guide for widget usage and keyboard shortcuts
+- [ ] Add admin guide for self-hosted environments
 
 ## 🌟 Contributing
 
