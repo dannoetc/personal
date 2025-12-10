@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         RaterHub Time Tracker – Steigenga (JWT + UI + Drag + Persist + AHT)
-// @namespace    https://steigenga.com/raterhub
+// @name         RaterHub Time Tracker
+// @namespace    https://raterhub.steigenga.com
 // @version      0.8
 // @description  Track RaterHub question timing via FastAPI backend with JWT auth and on-page widget
 // @author       Melissa Steigenga
