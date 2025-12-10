@@ -1,5 +1,6 @@
 # app/config.py
 import os
+from pathlib import Path
 
 class Settings:
     PROJECT_NAME = "RaterHub Tracker"
@@ -12,6 +13,9 @@ class Settings:
 
     # Database
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
+    
+    # Templates 
+    TEMPLATES_DIR: str = str(Path(__file__).resolve().parent / "templates")
 
     # CORS
     ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "").split(",") or [

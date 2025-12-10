@@ -39,30 +39,26 @@ from .auth import (
     create_access_token,
     decode_access_token,
 )
+from .config import settings
 
 # ============================================================
 # FastAPI initialization
 # ============================================================
 
 app = FastAPI(
-    title="RaterHub Tracker API",
-    description="Backend for timing and scoring RaterHub rating sessions.",
-    version="0.5.2",
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION,
 )
 
 Base.metadata.create_all(bind=engine)
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=settings.TEMPLATES_DIR)
 
 # CORS – allow your UI/API and RaterHub origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://raterhub.steigenga.com",
-        "https://api.raterhub.steigenga.com",
-        "https://raterhub.com",
-        "https://www.raterhub.com",
-    ],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -80,6 +76,12 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# ============================================================
+# Everything else remains unchanged below this line
+# ============================================================
+
+# (Your existing endpoint and helper function code goes here unchanged)
 
 # ============================================================
 # Utility helpers
