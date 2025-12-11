@@ -1,6 +1,6 @@
 # RaterHub Tracker
 
-RaterHub Tracker is a self-hosted, open-source productivity monitoring tool built to help users track session-based task completion time. Originally designed for workers using the RaterHub platform, it allows for detailed timing analysis of tasks and offers a JS powered overlay while you rate. 
+RaterHub Tracker is a self-hosted, open-source productivity buddy that helps you keep honest, lightweight tabs on your time. It started as a helper for RaterHub tasks, but it works just as well for anyone who wants session-based timing without handing data to a third party. You get a friendly JS overlay while you rate, clear summaries, and full control over your data.
 
 ## ✨ Features
 
@@ -8,6 +8,10 @@ RaterHub Tracker is a self-hosted, open-source productivity monitoring tool buil
 - Intuitive JavaScript-based widget for tracking your progress as you rate
 - User authentication and session management
 - Event-driven model with NEXT / PAUSE / EXIT / UNDO
+- Shared, timestamped message schema across the extension's background and content scripts so every overlay action is synchronized
+- Session-aware responses that send updated `session_id`, question totals, and summaries back to the widget
+- Content script persistence for timers and identifiers (pause/resume, undo, cached summaries) that restores your overlay after navigation
+- Background worker listeners that catch tab updates and push refreshed summaries when the page reloads
 - Per-session and per-day dashboards with visual summaries
 - Intelligent pacing feedback with emoji-based scoring
 - Lightweight HTML UI using Jinja2 templates
