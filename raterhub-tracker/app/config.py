@@ -7,19 +7,25 @@ class Settings:
     DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
     # JWT
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
+    SECRET_KEY = os.getenv("SECRET_KEY")
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY environment variable must be set")
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1440))
 
     # Database
     DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
-    
+
     # Templates
     TEMPLATES_DIR = str(Path(__file__).resolve().parent / "templates") + "/"
 
     # CORS
-    ALLOWED_ORIGINS = (
+    ALLOWED_ORIGINS = []
+    for raw_origin in (
         os.getenv("ALLOWED_ORIGINS")
         or "https://raterhub.steigenga.com,https://api.raterhub.steigenga.com,https://raterhub.com,https://www.raterhub.com"
-    ).split(",")
+    ).split(","):
+        origin = raw_origin.strip()
+        if origin:
+            ALLOWED_ORIGINS.append(origin)
 
 settings = Settings()
