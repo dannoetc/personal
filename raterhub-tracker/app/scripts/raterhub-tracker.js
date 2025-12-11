@@ -30,6 +30,7 @@ window.addEventListener('load', function () {
     let accumulatedActiveMs = 0;     // ms of active time before current run
     let timerIntervalId = null;
     let isPaused = false;
+    let isCollapsed = false;
 
     // --- Widget elements ---
     let widget, statusEl, userEl, questionEl, timerEl, lastEventEl, bodyContainer,
@@ -79,6 +80,7 @@ window.addEventListener('load', function () {
             const state = {
                 questionIndex: questionIndex,
                 currentSessionId: currentSessionId,
+                isCollapsed: isCollapsed,
             };
             localStorage.setItem(STATE_KEY, JSON.stringify(state));
         } catch (e) {
@@ -97,6 +99,9 @@ window.addEventListener('load', function () {
             if (typeof state.currentSessionId === "string") {
                 currentSessionId = state.currentSessionId;
             }
+            if (typeof state.isCollapsed === "boolean") {
+                isCollapsed = state.isCollapsed;
+            }
         } catch (e) {
             console.warn("[RaterHubTracker] Failed to load state:", e);
         }
@@ -105,6 +110,17 @@ window.addEventListener('load', function () {
     // -----------------------------------------
     // Widget creation & helpers
     // -----------------------------------------
+
+    function applyCollapsedState() {
+        if (!bodyContainer || !toggleBtn) return;
+        if (isCollapsed) {
+            bodyContainer.style.display = 'none';
+            toggleBtn.textContent = '▴';
+        } else {
+            bodyContainer.style.display = 'block';
+            toggleBtn.textContent = '▾';
+        }
+    }
 
     function createWidget() {
         widget = document.createElement('div');
@@ -132,6 +148,8 @@ window.addEventListener('load', function () {
         header.style.justifyContent = 'space-between';
         header.style.marginBottom = '4px';
         header.style.cursor = 'move';  // drag handle
+        header.style.userSelect = 'none';
+        header.style.touchAction = 'none';
 
         const title = document.createElement('div');
         title.textContent = 'RaterHub Tracker';
@@ -214,28 +232,28 @@ window.addEventListener('load', function () {
         // Try to restore last position
         loadWidgetPosition();
 
-        // --- Dragging events (on header only) ---
-        header.addEventListener('mousedown', onHeaderMouseDown);
-        document.addEventListener('mousemove', onDocumentMouseMove);
-        document.addEventListener('mouseup', onDocumentMouseUp);
+        // --- Dragging events (pointer-based, header only) ---
+        header.addEventListener('pointerdown', onHeaderPointerDown);
+        document.addEventListener('pointermove', onDocumentPointerMove);
+        document.addEventListener('pointerup', onDocumentPointerUp);
+        document.addEventListener('pointercancel', onDocumentPointerUp);
 
         // --- Collapse/expand ---
         toggleBtn.addEventListener('click', function (e) {
             e.stopPropagation();
-            if (bodyContainer.style.display === 'none') {
-                bodyContainer.style.display = 'block';
-                toggleBtn.textContent = '▾';
-            } else {
-                bodyContainer.style.display = 'none';
-                toggleBtn.textContent = '▴';
-            }
+            isCollapsed = !isCollapsed;
+            applyCollapsedState();
+            saveState();
         });
+
+        applyCollapsedState();
     }
 
-    function onHeaderMouseDown(e) {
+    function onHeaderPointerDown(e) {
         // Avoid starting drag when clicking directly on the toggle button
         if (e.target === toggleBtn) return;
 
+        widget.setPointerCapture(e.pointerId);
         isDragging = true;
         dragStartMouseX = e.clientX;
         dragStartMouseY = e.clientY;
@@ -250,11 +268,11 @@ window.addEventListener('load', function () {
         widget.style.right = 'auto';
         widget.style.bottom = 'auto';
 
-        // Prevent text selection
+        // Prevent text selection and default touch scrolling
         e.preventDefault();
     }
 
-    function onDocumentMouseMove(e) {
+    function onDocumentPointerMove(e) {
         if (!isDragging) return;
         const dx = e.clientX - dragStartMouseX;
         const dy = e.clientY - dragStartMouseY;
@@ -262,9 +280,14 @@ window.addEventListener('load', function () {
         widget.style.top = `${dragStartTop + dy}px`;
     }
 
-    function onDocumentMouseUp() {
+    function onDocumentPointerUp(e) {
         if (!isDragging) return;
         isDragging = false;
+        try {
+            widget.releasePointerCapture(e.pointerId);
+        } catch (_) {
+            // ignore if not captured
+        }
         saveWidgetPosition();
     }
 
@@ -724,6 +747,7 @@ window.addEventListener('load', function () {
     loadState();
     updateQuestionDisplay();
     updateTimerDisplay();
+    applyCollapsedState();
     updateUserDisplay();
     setStatus('Loaded – logging in…', '#4b5563');
     updateSessionStatsText('Session: –');
