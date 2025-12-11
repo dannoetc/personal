@@ -832,6 +832,7 @@ def build_day_summary(
     )
 
     if not sessions:
+        daily_pace = compute_pace(0.0, 0.0)
         return TodaySummary(
             date=local_start,  # report date as local midnight
             user_external_id=user.email,
@@ -841,8 +842,10 @@ def build_day_summary(
             total_active_mmss="00:00",
             avg_active_seconds=0.0,
             avg_active_mmss="00:00",
-            daily_pace_label="No questions",
-            daily_pace_emoji="😴",
+            daily_pace_label=daily_pace["pace_label"],
+            daily_pace_emoji=daily_pace["pace_emoji"],
+            daily_pace_score=daily_pace["score"],
+            daily_pace_ratio=daily_pace["ratio"],
             sessions=[],
         )
 
@@ -919,11 +922,7 @@ def build_day_summary(
         if total_questions_all
         else 0.0
     )
-    daily_pace = (
-        compute_pace(avg_active_day, avg_target_minutes)
-        if total_questions_all
-        else {"pace_label": "No questions", "pace_emoji": "😴"}
-    )
+    daily_pace = compute_pace(avg_active_day, avg_target_minutes)
 
     return TodaySummary(
         date=local_start,  # stored as local midnight in user's TZ
@@ -936,6 +935,8 @@ def build_day_summary(
         avg_active_mmss=format_hhmm_or_mmss_for_dashboard(avg_active_day),
         daily_pace_label=daily_pace["pace_label"],
         daily_pace_emoji=daily_pace["pace_emoji"],
+        daily_pace_score=daily_pace["score"],
+        daily_pace_ratio=daily_pace["ratio"],
         sessions=items,
     )
 
