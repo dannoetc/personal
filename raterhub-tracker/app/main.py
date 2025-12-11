@@ -836,7 +836,7 @@ def build_day_summary(
         .all()
     )
 
-    hourly_activity_data = [
+    hourly_activity_buckets = [
         {"hour": hour, "active_seconds": 0.0, "total_questions": 0}
         for hour in range(24)
     ]
@@ -857,7 +857,7 @@ def build_day_summary(
             daily_pace_emoji=daily_pace["pace_emoji"],
             daily_pace_score=daily_pace["score"],
             daily_pace_ratio=daily_pace["ratio"],
-            hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_data],
+            hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_buckets],
             sessions=[],
         )
 
@@ -922,11 +922,7 @@ def build_day_summary(
             started_local = to_user_local(q.started_at, user)
             if started_local is None:
                 continue
-            bucket_hour = started_local.hour
-            bucket = hourly_activity_data[bucket_hour]
-            if isinstance(bucket, HourlyActivity):
-                bucket = bucket.model_dump()
-                hourly_activity_data[bucket_hour] = bucket
+            bucket = hourly_activity_buckets[started_local.hour]
             bucket["active_seconds"] += q.active_seconds or 0.0
             bucket["total_questions"] += 1
 
@@ -982,7 +978,7 @@ def build_day_summary(
         daily_pace_emoji=daily_pace["pace_emoji"],
         daily_pace_score=daily_pace["score"],
         daily_pace_ratio=daily_pace["ratio"],
-        hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_data],
+        hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_buckets],
         sessions=items,
     )
 
