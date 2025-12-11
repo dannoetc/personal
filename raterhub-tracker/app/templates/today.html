@@ -344,6 +344,24 @@
                 Sum of focused time on tasks (pauses excluded)
             </div>
         </div>
+
+        <div class="summary-card">
+            <div class="summary-label">Avg Time / Question</div>
+            <div class="summary-value">{{ summary.avg_active_mmss }}</div>
+            <div class="summary-extra">
+                Across all questions today
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-label">Daily Pace</div>
+            <div class="summary-value">
+                <span class="pace-chip">{{ summary.daily_pace_emoji }} {{ summary.daily_pace_label }}</span>
+            </div>
+            <div class="summary-extra">
+                Based on average time vs target
+            </div>
+        </div>
     </div>
 
     <!-- Per-session details -->
