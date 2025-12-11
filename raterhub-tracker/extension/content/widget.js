@@ -25,8 +25,11 @@
   let widget,
     statusEl,
     userEl,
-    questionEl,
-    timerEl,
+    questionValueEl,
+    timerValueEl,
+    sessionAhtValueEl,
+    paceValueEl,
+    paceDetailEl,
     lastEventEl,
     bodyContainer,
     toggleBtn,
@@ -145,32 +148,33 @@
     widget.style.bottom = "16px";
     widget.style.right = "16px";
     widget.style.zIndex = "999999";
-    widget.style.background = "#ffffff";
-    widget.style.borderRadius = "10px";
-    widget.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.15)";
-    widget.style.padding = "8px 10px";
+    widget.style.background = "rgba(255, 255, 255, 0.9)";
+    widget.style.backdropFilter = "blur(10px)";
+    widget.style.borderRadius = "16px";
+    widget.style.boxShadow = "0 10px 30px rgba(0, 0, 0, 0.18)";
+    widget.style.padding = "12px";
     widget.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
     widget.style.fontSize = "12px";
     widget.style.color = "#1f2933";
-    widget.style.minWidth = "240px";
-    widget.style.border = "2px solid #8b5cf6";
-    widget.style.backgroundImage = "linear-gradient(to bottom, #f9f5ff, #ffffff)";
+    widget.style.minWidth = "260px";
+    widget.style.border = "1px solid #e5e7eb";
+    widget.style.backgroundImage = "linear-gradient(145deg, #f7f9fc 0%, #ffffff 60%, #f5f7fb 100%)";
     widget.style.cursor = "default";
 
     const header = document.createElement("div");
     header.style.display = "flex";
     header.style.alignItems = "center";
     header.style.justifyContent = "space-between";
-    header.style.marginBottom = "4px";
+    header.style.marginBottom = "8px";
     header.style.cursor = "move";
     header.style.userSelect = "none";
     header.style.touchAction = "none";
 
     const title = document.createElement("div");
-    title.textContent = "RaterHub Tracker";
+    title.textContent = "Session Companion";
     title.style.fontWeight = "700";
     title.style.fontSize = "13px";
-    title.style.color = "#6d28d9";
+    title.style.color = "#0f172a";
 
     toggleBtn = document.createElement("button");
     toggleBtn.textContent = "▾";
@@ -195,30 +199,143 @@
 
     userEl = document.createElement("div");
     userEl.textContent = "User: (not logged in)";
-    userEl.style.marginBottom = "2px";
+    userEl.style.marginBottom = "6px";
 
-    questionEl = document.createElement("div");
-    questionEl.textContent = "Question: –";
-    questionEl.style.marginBottom = "2px";
+    const cardsGrid = document.createElement("div");
+    cardsGrid.style.display = "grid";
+    cardsGrid.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+    cardsGrid.style.gap = "8px";
+    cardsGrid.style.marginBottom = "10px";
 
-    timerEl = document.createElement("div");
-    timerEl.textContent = "Timer: 00:00";
-    timerEl.style.marginBottom = "6px";
-    timerEl.style.fontFeatureSettings = '"tnum" 1';
-    timerEl.style.fontVariantNumeric = "tabular-nums";
-    timerEl.style.color = "#4c1d95";
+    function createCard(labelText) {
+      const card = document.createElement("div");
+      card.style.background = "rgba(255,255,255,0.9)";
+      card.style.border = "1px solid #e5e7eb";
+      card.style.borderRadius = "14px";
+      card.style.padding = "10px";
+      card.style.boxShadow = "0 6px 14px rgba(15, 23, 42, 0.08)";
 
-    sessionStatsEl = document.createElement("div");
-    sessionStatsEl.textContent = "Session: –";
-    sessionStatsEl.style.fontSize = "11px";
-    sessionStatsEl.style.marginBottom = "6px";
-    sessionStatsEl.style.color = "#4b5563";
+      const label = document.createElement("div");
+      label.textContent = labelText;
+      label.style.fontSize = "11px";
+      label.style.color = "#475569";
+      label.style.fontWeight = "600";
+      label.style.marginBottom = "4px";
+
+      const value = document.createElement("div");
+      value.textContent = "–";
+      value.style.fontSize = "20px";
+      value.style.fontWeight = "700";
+      value.style.color = "#0f172a";
+      value.style.fontFeatureSettings = '"tnum" 1';
+      value.style.fontVariantNumeric = "tabular-nums";
+
+      const helper = document.createElement("div");
+      helper.style.fontSize = "11px";
+      helper.style.color = "#6b7280";
+      helper.textContent = "";
+
+      card.appendChild(label);
+      card.appendChild(value);
+      card.appendChild(helper);
+      return { card, value, helper };
+    }
+
+    const questionCard = createCard("Question #");
+    questionValueEl = questionCard.value;
+    questionCard.helper.textContent = "Progress";
+
+    const timerCard = createCard("Timer");
+    timerValueEl = timerCard.value;
+    timerValueEl.textContent = "00:00";
+    timerValueEl.style.color = "#4c1d95";
+    timerCard.helper.textContent = "Active time";
+
+    const ahtCard = createCard("Session AHT");
+    sessionAhtValueEl = ahtCard.value;
+    sessionAhtValueEl.textContent = "–";
+    ahtCard.helper.textContent = "Avg active mm:ss";
+
+    const paceCard = createCard("Pace");
+    paceValueEl = paceCard.value;
+    paceValueEl.textContent = "–";
+    paceDetailEl = paceCard.helper;
+    paceDetailEl.textContent = "vs target";
+
+    cardsGrid.appendChild(questionCard.card);
+    cardsGrid.appendChild(timerCard.card);
+    cardsGrid.appendChild(ahtCard.card);
+    cardsGrid.appendChild(paceCard.card);
 
     lastEventEl = document.createElement("div");
     lastEventEl.textContent = "Last event: –";
     lastEventEl.style.fontSize = "11px";
-    lastEventEl.style.marginBottom = "6px";
+    lastEventEl.style.marginBottom = "10px";
     lastEventEl.style.color = "#6b7280";
+
+    sessionStatsEl = document.createElement("div");
+    sessionStatsEl.textContent = "Session: –";
+    sessionStatsEl.style.fontSize = "11px";
+    sessionStatsEl.style.marginBottom = "8px";
+    sessionStatsEl.style.color = "#4b5563";
+
+    const controlsRow = document.createElement("div");
+    controlsRow.style.display = "grid";
+    controlsRow.style.gridTemplateColumns = "repeat(2, minmax(0, 1fr))";
+    controlsRow.style.gap = "8px";
+
+    function createActionButton(label, bg, color, border, handler) {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.style.padding = "10px";
+      btn.style.borderRadius = "12px";
+      btn.style.border = border || "1px solid #e2e8f0";
+      btn.style.background = bg;
+      btn.style.color = color;
+      btn.style.fontWeight = "700";
+      btn.style.fontSize = "12px";
+      btn.style.cursor = "pointer";
+      btn.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.6), 0 8px 16px rgba(59, 130, 246, 0.12)";
+      btn.addEventListener("click", handler);
+      return btn;
+    }
+
+    const nextBtn = createActionButton(
+      "Next",
+      "linear-gradient(135deg, #2563eb, #4f46e5)",
+      "#ffffff",
+      "1px solid #1d4ed8",
+      () => sendEvent("NEXT")
+    );
+
+    const pauseBtn = createActionButton(
+      "Pause Session",
+      "#ffffff",
+      "#1d4ed8",
+      "1px solid #bfdbfe",
+      () => sendEvent("PAUSE")
+    );
+
+    const undoBtn = createActionButton(
+      "Undo Last Event",
+      "#ffffff",
+      "#0f172a",
+      "1px solid #e2e8f0",
+      () => sendEvent("UNDO")
+    );
+
+    const exitBtn = createActionButton(
+      "End Session",
+      "linear-gradient(135deg, #ef4444, #dc2626)",
+      "#ffffff",
+      "1px solid #b91c1c",
+      () => sendEvent("EXIT")
+    );
+
+    controlsRow.appendChild(nextBtn);
+    controlsRow.appendChild(pauseBtn);
+    controlsRow.appendChild(undoBtn);
+    controlsRow.appendChild(exitBtn);
 
     const hotkeys = document.createElement("div");
     hotkeys.style.fontSize = "10px";
@@ -233,10 +350,10 @@
 
     bodyContainer.appendChild(statusEl);
     bodyContainer.appendChild(userEl);
-    bodyContainer.appendChild(questionEl);
-    bodyContainer.appendChild(timerEl);
-    bodyContainer.appendChild(sessionStatsEl);
+    bodyContainer.appendChild(cardsGrid);
     bodyContainer.appendChild(lastEventEl);
+    bodyContainer.appendChild(sessionStatsEl);
+    bodyContainer.appendChild(controlsRow);
     bodyContainer.appendChild(hotkeys);
 
     widget.appendChild(header);
@@ -318,8 +435,8 @@
   }
 
   function updateQuestionDisplay() {
-    if (!questionEl) return;
-    questionEl.textContent = `Question: ${questionIndex > 0 ? questionIndex : "–"}`;
+    if (!questionValueEl) return;
+    questionValueEl.textContent = questionIndex > 0 ? `${questionIndex}` : "–";
   }
 
   function formatMs(ms) {
@@ -332,12 +449,12 @@
   }
 
   function updateTimerDisplay() {
-    if (!timerEl) return;
+    if (!timerValueEl) return;
     let elapsedMs = accumulatedActiveMs;
     if (!isPaused && questionStartTime) {
       elapsedMs += Date.now() - questionStartTime;
     }
-    timerEl.textContent = `Timer: ${formatMs(elapsedMs)}`;
+    timerValueEl.textContent = formatMs(elapsedMs);
   }
 
   function startTimerLoop() {
@@ -428,6 +545,16 @@
     const avg = summary.avg_active_mmss || "00:00";
     const emoji = summary.pace_emoji || "";
     const label = summary.pace_label || "";
+    if (sessionAhtValueEl) {
+      sessionAhtValueEl.textContent = avg;
+    }
+    if (paceValueEl) {
+      const paceText = [emoji, label].filter(Boolean).join(" ") || "–";
+      paceValueEl.textContent = paceText;
+    }
+    if (paceDetailEl) {
+      paceDetailEl.textContent = label ? "Pace vs target" : "vs target";
+    }
     updateSessionStatsText(`Session: ${totalQ} q, AHT ${avg} ${emoji} ${label}`);
     saveState();
   }
@@ -442,6 +569,15 @@
     stopTimerLoop();
     updateQuestionDisplay();
     updateTimerDisplay();
+    if (sessionAhtValueEl) {
+      sessionAhtValueEl.textContent = "–";
+    }
+    if (paceValueEl) {
+      paceValueEl.textContent = "–";
+    }
+    if (paceDetailEl) {
+      paceDetailEl.textContent = "vs target";
+    }
     updateSessionStatsText(reasonText || "Session: –");
     saveState();
   }
