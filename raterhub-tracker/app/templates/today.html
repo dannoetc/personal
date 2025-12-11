@@ -119,6 +119,37 @@
             max-width: 100%;
         }
 
+        .sparkline-grid {
+            display: grid;
+            grid-template-columns: repeat(24, 1fr);
+            gap: 2px;
+            align-items: end;
+            height: 52px;
+            margin-top: 8px;
+        }
+
+        .sparkline-col {
+            width: 100%;
+            background: linear-gradient(180deg, #6c5ce7, #a66bff);
+            border-radius: 3px 3px 0 0;
+            min-height: 4px;
+            opacity: 0.85;
+        }
+
+        .sparkline-col.is-zero {
+            background: #e6ddff;
+            opacity: 0.6;
+            min-height: 3px;
+        }
+
+        .sparkline-axis {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
         .section-title {
             font-size: 16px;
             color: var(--accent-dark);
@@ -354,12 +385,39 @@
         </div>
 
         <div class="summary-card">
-            <div class="summary-label">Daily Pace</div>
+            <div class="summary-label">Daily pace vs target</div>
             <div class="summary-value">
                 <span class="pace-chip">{{ summary.daily_pace_emoji }} {{ summary.daily_pace_label }}</span>
             </div>
             <div class="summary-extra">
                 Based on average time vs target
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-label">Hourly activity</div>
+            {% set hourly = summary.hourly_active_seconds or [] %}
+            {% set max_value = (hourly | max) if hourly else 0 %}
+            <div class="summary-value" aria-label="Sparkline of hourly active seconds">
+                <div class="sparkline-grid">
+                    {% for value in hourly %}
+                        {% set raw_height = (value / max_value * 100) if max_value > 0 else 0 %}
+                        {% set bar_height = raw_height if raw_height > 6 else (6 if value > 0 else 0) %}
+                        <div
+                            class="sparkline-col{% if value == 0 %} is-zero{% endif %}"
+                            style="height: {{ bar_height }}%;"
+                            title="{{ '%02d' % loop.index0 }}: {{ value|round(0) }}s active"
+                        ></div>
+                    {% endfor %}
+                </div>
+                <div class="sparkline-axis">
+                    <span>00h</span>
+                    <span>12h</span>
+                    <span>24h</span>
+                </div>
+            </div>
+            <div class="summary-extra">
+                Active seconds per local hour{% if user_timezone %} ({{ user_timezone }}){% endif %}
             </div>
         </div>
     </div>
