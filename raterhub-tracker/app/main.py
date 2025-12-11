@@ -836,8 +836,8 @@ def build_day_summary(
         .all()
     )
 
-    hourly_activity: List[HourlyActivity] = [
-        HourlyActivity(hour=hour, active_seconds=0.0, total_questions=0)
+    hourly_activity_data = [
+        {"hour": hour, "active_seconds": 0.0, "total_questions": 0}
         for hour in range(24)
     ]
 
@@ -857,7 +857,7 @@ def build_day_summary(
             daily_pace_emoji=daily_pace["pace_emoji"],
             daily_pace_score=daily_pace["score"],
             daily_pace_ratio=daily_pace["ratio"],
-            hourly_activity=hourly_activity,
+            hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_data],
             sessions=[],
         )
 
@@ -923,8 +923,8 @@ def build_day_summary(
             if started_local is None:
                 continue
             bucket_hour = started_local.hour
-            hourly_activity[bucket_hour].active_seconds += q.active_seconds or 0.0
-            hourly_activity[bucket_hour].total_questions += 1
+            hourly_activity_data[bucket_hour]["active_seconds"] += q.active_seconds or 0.0
+            hourly_activity_data[bucket_hour]["total_questions"] += 1
 
         items.append(
             TodaySessionItem(
@@ -978,7 +978,7 @@ def build_day_summary(
         daily_pace_emoji=daily_pace["pace_emoji"],
         daily_pace_score=daily_pace["score"],
         daily_pace_ratio=daily_pace["ratio"],
-        hourly_activity=hourly_activity,
+        hourly_activity=[HourlyActivity(**bucket) for bucket in hourly_activity_data],
         sessions=items,
     )
 
