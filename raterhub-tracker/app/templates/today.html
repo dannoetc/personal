@@ -385,7 +385,7 @@
         </div>
 
         <div class="summary-card">
-            <div class="summary-label">Daily pace vs target</div>
+            <div class="summary-label">Daily Pace</div>
             <div class="summary-value">
                 <span class="pace-chip">{{ summary.daily_pace_emoji }} {{ summary.daily_pace_label }}</span>
             </div>
@@ -393,55 +393,6 @@
                 Based on average time vs target
             </div>
         </div>
-
-        <div class="summary-card">
-            <div class="summary-label">Hourly activity</div>
-            {% set hourly = summary.hourly_active_seconds or [] %}
-            {% set max_value = (hourly | max) if hourly else 0 %}
-            <div class="summary-value" aria-label="Sparkline of hourly active seconds">
-                <div class="sparkline-grid">
-                    {% for value in hourly %}
-                        {% set raw_height = (value / max_value * 100) if max_value > 0 else 0 %}
-                        {% set bar_height = raw_height if raw_height > 6 else (6 if value > 0 else 0) %}
-                        <div
-                            class="sparkline-col{% if value == 0 %} is-zero{% endif %}"
-                            style="height: {{ bar_height }}%;"
-                            title="{{ '%02d' % loop.index0 }}: {{ value|round(0) }}s active"
-                        ></div>
-                    {% endfor %}
-                </div>
-                <div class="sparkline-axis">
-                    <span>00h</span>
-                    <span>12h</span>
-                    <span>24h</span>
-                </div>
-            </div>
-            <div class="summary-extra">
-                Active seconds per local hour{% if user_timezone %} ({{ user_timezone }}){% endif %}
-            </div>
-        </div>
-    </div>
-
-    <div class="hourly-activity-card">
-        <h2 class="section-title" style="margin-top: 0;">Hourly activity</h2>
-        <p class="section-subtitle" style="margin-bottom: 8px;">
-            Active seconds grouped by local hour (timezone: {{ user_timezone or 'UTC' }}).
-        </p>
-        {% set max_active = (summary.hourly_activity | map(attribute='active_seconds') | max) if summary.hourly_activity else 0 %}
-        {% if not max_active %}
-            <div class="empty-state" style="margin-top: 8px;">No activity recorded this day.</div>
-        {% else %}
-            <div class="hourly-bars">
-                {% for bucket in summary.hourly_activity %}
-                    {% set pct = (bucket.active_seconds / max_active * 100) if max_active else 0 %}
-                    <div class="hourly-bar">
-                        <div class="hourly-bar-fill" style="height: {{ pct }}%;"></div>
-                        <div class="hourly-label">{{ "%02d" % bucket.hour }}</div>
-                        <div class="hourly-value">{{ bucket.active_seconds | round(0) | int }}s</div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
     </div>
 
     <!-- Per-session details -->

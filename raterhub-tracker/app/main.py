@@ -846,11 +846,8 @@ def build_day_summary(
             total_active_mmss="00:00",
             avg_active_seconds=0.0,
             avg_active_mmss="00:00",
-            daily_pace_label=daily_pace["pace_label"],
-            daily_pace_emoji=daily_pace["pace_emoji"],
-            daily_pace_score=daily_pace["score"],
-            daily_pace_ratio=daily_pace["ratio"],
-            hourly_active_seconds=hourly_buckets,
+            daily_pace_label="No questions",
+            daily_pace_emoji="😴",
             sessions=[],
         )
 
@@ -858,7 +855,6 @@ def build_day_summary(
     total_questions_all = 0
     total_active_all = 0.0
     total_target_minutes_weighted = 0.0
-    hourly_active_seconds = [0.0 for _ in range(24)]
     items: List[TodaySessionItem] = []
 
     for s in sessions:
@@ -904,11 +900,6 @@ def build_day_summary(
         total_active_all += total_active
         total_target_minutes_weighted += target_minutes * count
 
-        for q in qs:
-            q_local_start = to_user_local(q.started_at, user)
-            if q_local_start.date() == local_start.date():
-                hourly_active_seconds[q_local_start.hour] += q.active_seconds
-
         items.append(
             TodaySessionItem(
                 session_id=s.public_id,
@@ -933,7 +924,11 @@ def build_day_summary(
         if total_questions_all
         else 0.0
     )
-    daily_pace = compute_pace(avg_active_day, avg_target_minutes)
+    daily_pace = (
+        compute_pace(avg_active_day, avg_target_minutes)
+        if total_questions_all
+        else {"pace_label": "No questions", "pace_emoji": "😴"}
+    )
 
     return TodaySummary(
         date=local_start,  # stored as local midnight in user's TZ
@@ -946,9 +941,6 @@ def build_day_summary(
         avg_active_mmss=format_hhmm_or_mmss_for_dashboard(avg_active_day),
         daily_pace_label=daily_pace["pace_label"],
         daily_pace_emoji=daily_pace["pace_emoji"],
-        daily_pace_score=daily_pace["score"],
-        daily_pace_ratio=daily_pace["ratio"],
-        hourly_active_seconds=hourly_active_seconds,
         sessions=items,
     )
 
