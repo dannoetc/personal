@@ -119,6 +119,27 @@
             max-width: 100%;
         }
 
+        .sparkline-grid {
+            display: flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 36px;
+            margin-top: 10px;
+        }
+
+        .sparkline-col {
+            flex: 1;
+            border-radius: 6px;
+            background: linear-gradient(180deg, rgba(166, 107, 255, 0.25), rgba(255, 110, 199, 0.8));
+            min-height: 4px;
+        }
+
+        .sparkline-caption {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
         .section-title {
             font-size: 16px;
             color: var(--accent-dark);
@@ -330,10 +351,19 @@
             <div class="summary-value">{{ summary.total_questions or 0 }}</div>
             <div class="summary-extra">
                 Across all sessions
-                <div class="sparkline-bar">
-                    {% set q = summary.total_questions or 0 %}
-                    <div class="sparkline-fill" style="width: {{ (q if q < 40 else 40) * 2.5 }}%;"></div>
-                </div>
+                {% set hourly = summary.hourly_activity or [] %}
+                {% set max_bucket = (hourly | max) if hourly else 0 %}
+                {% if hourly and max_bucket > 0 %}
+                    <div class="sparkline-grid">
+                        {% for count in hourly %}
+                            {% set scale = (count / max_bucket * 100) if max_bucket > 0 else 0 %}
+                            <div class="sparkline-col" style="height: {{ 8 + (scale * 0.9) }}%; opacity: {{ 0.3 + (0.7 * (scale / 100)) }};"></div>
+                        {% endfor %}
+                    </div>
+                    <div class="sparkline-caption">Hourly question starts (local)</div>
+                {% else %}
+                    <div class="sparkline-caption">No hourly activity yet today</div>
+                {% endif %}
             </div>
         </div>
 
@@ -342,6 +372,24 @@
             <div class="summary-value">{{ summary.total_active_mmss }}</div>
             <div class="summary-extra">
                 Sum of focused time on tasks (pauses excluded)
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-label">Avg Time / Question</div>
+            <div class="summary-value">{{ summary.avg_active_mmss }}</div>
+            <div class="summary-extra">
+                Across all questions today
+            </div>
+        </div>
+
+        <div class="summary-card">
+            <div class="summary-label">Daily Pace</div>
+            <div class="summary-value">
+                <span class="pace-chip">{{ summary.daily_pace_emoji }} {{ summary.daily_pace_label }}</span>
+            </div>
+            <div class="summary-extra">
+                Based on average time vs target
             </div>
         </div>
     </div>
