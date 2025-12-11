@@ -265,7 +265,9 @@ def root(
 
 @limiter.limit("3/minute")
 @app.post("/auth/register", response_model=Token)
-def register_api(user_in: UserCreate, db: OrmSession = Depends(get_db)):
+def register_api(
+    request: Request, user_in: UserCreate, db: OrmSession = Depends(get_db)
+):
     exists = db.query(User).filter(User.email == user_in.email).first()
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -289,7 +291,7 @@ def register_api(user_in: UserCreate, db: OrmSession = Depends(get_db)):
 
 @limiter.limit("5/minute")
 @app.post("/auth/login", response_model=Token)
-def login_api(user_in: UserLogin, db: OrmSession = Depends(get_db)):
+def login_api(request: Request, user_in: UserLogin, db: OrmSession = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if not user or not user.password_hash:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -320,7 +322,7 @@ def login_web(
     db: OrmSession = Depends(get_db),
 ):
     user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(password, user.password_hash):
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Invalid email or password", "email": email},
@@ -494,6 +496,7 @@ def recent_sessions(
 @limiter.limit("15/minute")
 @app.post("/events", response_model=EventOut)
 def post_event(
+    request: Request,
     event: EventIn,
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),

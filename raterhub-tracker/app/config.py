@@ -19,9 +19,13 @@ class Settings:
     TEMPLATES_DIR = str(Path(__file__).resolve().parent / "templates") + "/"
 
     # CORS
-    ALLOWED_ORIGINS = (
+    ALLOWED_ORIGINS = []
+    for raw_origin in (
         os.getenv("ALLOWED_ORIGINS")
         or "https://raterhub.steigenga.com,https://api.raterhub.steigenga.com,https://raterhub.com,https://www.raterhub.com"
-    ).split(",")
+    ).split(","):
+        origin = raw_origin.strip()
+        if origin:
+            ALLOWED_ORIGINS.append(origin)
 
 settings = Settings()
