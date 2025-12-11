@@ -191,7 +191,6 @@
     widget.style.color = "#1f2933";
     widget.style.minWidth = "230px";
     widget.style.minHeight = "200px";
-    widget.style.resize = "both";
     widget.style.overflow = "hidden";
     widget.style.border = "1.5px solid #7c3aed";
     widget.style.backgroundImage = "linear-gradient(155deg, #f8f5ff 0%, #ffffff 55%, #f3e8ff 100%)";
@@ -216,6 +215,16 @@
     title.style.fontWeight = "700";
     title.style.fontSize = "13px";
     title.style.color = "#0f172a";
+
+    collapsedTimerEl = document.createElement("span");
+    collapsedTimerEl.textContent = "00:00";
+    collapsedTimerEl.style.fontSize = "11px";
+    collapsedTimerEl.style.fontWeight = "700";
+    collapsedTimerEl.style.color = "#4b5563";
+    collapsedTimerEl.style.display = "none";
+
+    titleWrapper.appendChild(title);
+    titleWrapper.appendChild(collapsedTimerEl);
 
     collapsedTimerEl = document.createElement("span");
     collapsedTimerEl.textContent = "00:00";
@@ -339,13 +348,13 @@
       const btn = document.createElement("button");
       btn.textContent = label;
       btn.title = titleText || "";
-      btn.style.padding = "10px";
+      btn.style.padding = "9px";
       btn.style.borderRadius = "12px";
       btn.style.border = border || "1px solid #e2e8f0";
       btn.style.background = bg;
       btn.style.color = color;
       btn.style.fontWeight = "700";
-      btn.style.fontSize = "16px";
+      btn.style.fontSize = "13px";
       btn.style.cursor = "pointer";
       btn.style.boxShadow = "inset 0 1px 0 rgba(255,255,255,0.6), 0 6px 12px rgba(109, 40, 217, 0.18)";
       btn.addEventListener("click", handler);
@@ -353,7 +362,7 @@
     }
 
     const nextBtn = createActionButton(
-      "▶️",
+      "Next",
       "linear-gradient(135deg, #7c3aed, #4c1d95)",
       "#ffffff",
       "1px solid #7c3aed",
@@ -362,7 +371,7 @@
     );
 
     const pauseBtn = createActionButton(
-      "⏸️",
+      "Pause",
       "#f5f3ff",
       "#6d28d9",
       "1px solid #ddd6fe",
@@ -371,7 +380,7 @@
     );
 
     const undoBtn = createActionButton(
-      "↩️",
+      "Undo",
       "#f5f3ff",
       "#1f2937",
       "1px solid #ddd6fe",
@@ -380,7 +389,7 @@
     );
 
     const exitBtn = createActionButton(
-      "⏹️",
+      "End",
       "linear-gradient(135deg, #a855f7, #7c3aed)",
       "#ffffff",
       "1px solid #7c3aed",
