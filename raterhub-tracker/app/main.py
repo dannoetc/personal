@@ -794,7 +794,11 @@ def dashboard_session(
     summary = build_session_summary(db, current_user, session_public_id)
     return templates.TemplateResponse(
         "session.html",
-        {"request": request, "summary": summary},
+        {
+            "request": request,
+            "summary": summary,
+            "current_user_email": getattr(current_user, "email", None),
+        },
     )
 
 # ============================================================
@@ -1012,6 +1016,7 @@ def dashboard_today(
             "summary": summary,
             "selected_date": selected_date_str,
             "user_timezone": getattr(current_user, "timezone", None),
+            "current_user_email": getattr(current_user, "email", None),
         },
     )
 
