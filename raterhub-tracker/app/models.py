@@ -105,9 +105,6 @@ class TodaySummary(BaseModel):
     daily_pace_label: str
     daily_pace_emoji: str
 
-    # Optional for backward compatibility with older templates/clients expecting this field.
-    hourly_activity: list = Field(default_factory=list)
-
     hourly_activity: list[HourlyActivity]
     sessions: list[TodaySessionItem]
 

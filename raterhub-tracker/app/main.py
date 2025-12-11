@@ -836,8 +836,10 @@ def build_day_summary(
         .all()
     )
 
-    hourly_buckets: List[float] = [0.0 for _ in range(24)]
-    hourly_question_counts: List[int] = [0 for _ in range(24)]
+    hourly_activity: List[HourlyActivity] = [
+        HourlyActivity(hour=hour, active_seconds=0.0, total_questions=0)
+        for hour in range(24)
+    ]
 
     if not sessions:
         hourly_buckets = [0.0 for _ in range(24)]
@@ -855,10 +857,7 @@ def build_day_summary(
             daily_pace_emoji=daily_pace["pace_emoji"],
             daily_pace_score=daily_pace["score"],
             daily_pace_ratio=daily_pace["ratio"],
-            hourly_activity=[
-                HourlyActivity(hour=hour, active_seconds=0.0, total_questions=0)
-                for hour in range(24)
-            ],
+            hourly_activity=hourly_activity,
             sessions=[],
         )
 
@@ -924,8 +923,8 @@ def build_day_summary(
             if started_local is None:
                 continue
             bucket_hour = started_local.hour
-            hourly_buckets[bucket_hour] += q.active_seconds or 0.0
-            hourly_question_counts[bucket_hour] += 1
+            hourly_activity[bucket_hour].active_seconds += q.active_seconds or 0.0
+            hourly_activity[bucket_hour].total_questions += 1
 
         items.append(
             TodaySessionItem(
