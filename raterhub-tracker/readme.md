@@ -1,68 +1,120 @@
-# RaterHub Tracker
+# 💜 RaterHub Tracker
 
-RaterHub Tracker is a FastAPI application for session-based productivity tracking. It records event streams from a JavaScript widget (NEXT, PAUSE, UNDO, EXIT), aggregates timing per question and per day, and secures access with JWT authentication and CSRF protection.
+RaterHub Tracker is a lightweight, privacy-conscious time tracker designed specifically for Raters working on [RaterHub.com](https://www.raterhub.com). It helps track question timing and session activity using a browser widget and a FastAPI backend — no browser extensions or third-party logins required.
 
-## What you get
-- FastAPI backend with JWT auth, CSRF, and rate limits
-- Event-driven model that enforces valid session/question flows
-- Per-session and per-day dashboards (HTML + JSON) with pacing scores
-- Simple Jinja2 HTML flows plus a TamperMonkey-friendly widget
-- SQLite by default, PostgreSQL recommended for production
+---
 
-## Quickstart
+## 🚀 What It Does
+
+- ⏱️ Tracks NEXT / PAUSE / EXIT / UNDO events using hotkeys or clicks
+- 📊 Computes active and raw question time, session pace, and day totals
+- 🔐 Authenticates with JWT tokens, password auth, and CSRF protection
+- 📈 Offers dashboards for each session and day, with visual pacing feedback
+- 🌐 Works via a self-hosted API + TamperMonkey (or local) widget
+
+---
+
+## 🧰 Tech Stack
+
+- **Backend**: FastAPI + SQLAlchemy + PostgreSQL (or SQLite)
+- **Auth**: JWT Bearer tokens, CSRF, optional rate limiting (SlowAPI)
+- **Frontend**: TamperMonkey widget + Jinja2 HTML templates
+- **Packaging**: Docker, `.env` support, Makefile for quick builds
+
+---
+
+## ⚙️ Quickstart (Local)
+
 ```bash
 cd app
 python -m venv .venv
 source .venv/bin/activate
 pip install -r ../requirements.txt
-# Supply environment variables (see below), then run:
 uvicorn main:app --reload
 ```
 
-Or run everything via Docker Compose:
+### Or with Docker:
+
 ```bash
-docker-compose up --build
+docker build -t raterhub-tracker .
+docker run --rm -p 8000:8000 --env-file .env raterhub-tracker
 ```
 
-## Configuration highlights
-Set these environment variables (or add them to `.env`):
-- `SECRET_KEY` (required): signs JWTs and CSRF HMACs; app exits if missing.
-- `ACCESS_TOKEN_EXPIRE_MINUTES` (default `1440`): token lifetime.
-- `DATABASE_URL` (default `sqlite:///./app.db`): SQLAlchemy connection string.
-- `SESSION_COOKIE_SECURE` (default `True` unless `DEBUG=true`): `Secure` flag on cookies.
-- `ALLOWED_ORIGINS`: comma-separated CORS whitelist for the widget and HTML flows.
+---
 
-## Architecture at a glance
-- **Entrypoint:** `app/main.py` wires FastAPI, middleware, rate limiting, CSRF helpers, and routes.
-- **Auth:** JWT bearer tokens issued in `app/auth.py`, accepted via header or `access_token` cookie.
-- **Persistence:** SQLAlchemy models in `app/db_models.py`; session factory in `app/database.py`.
-- **Schemas:** Request/response shapes live in `app/models.py`.
+## 🔐 Environment Configuration (`.env`)
 
-## Event flow (widget → backend)
-- Events POST to `/events` with `NEXT`, `PAUSE`, `UNDO`, or `EXIT` plus a timestamp.
-- `NEXT` starts sessions and advances questions; `EXIT` ends the session.
-- `PAUSE` toggles paused state and accumulates paused time; `UNDO` rewinds the last question.
+```env
+SECRET_KEY=your-super-secret-key
+DATABASE_URL=postgresql+psycopg2://raterhub:super-secret@localhost:5432/raterhub
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+ALLOWED_ORIGINS=https://raterhub.com,https://api.raterhub.com
+DEBUG=false
+```
 
-## Key endpoints
-- Health: `GET /health`
-- Auth: `GET /auth/csrf`, `POST /auth/register`, `POST /auth/login`, `GET /me`
-- Sessions & events: `POST /events`, `GET /summary/{session_id}`, `DELETE /sessions/{session_id}`, `DELETE /sessions/{session_id}/questions/{question_id}`
-- Dashboards: `GET /dashboard/today` (HTML) and `/dashboard/today/json`
-- Profile: `GET/POST /profile`
+---
 
-## Dashboards & pacing
-Session summaries show per-question durations (raw vs. active) and pacing feedback. Daily dashboards bucket activity by hour and compute weighted pacing across sessions; target pace defaults to 5.5 minutes per question unless overridden per session.
+## 🔁 Event Lifecycle
 
-## Security & operations
-- Passwords must meet a 12-character mixed-case/digit/symbol policy and avoid recent reuse.
-- CSRF tokens are required for login/registration and are issued via `GET /auth/csrf` (cookie + header/form echo).
-- SlowAPI rate limits protect auth and event ingestion; login throttling tracks per-account and per-IP failures.
-- Tables auto-create on startup via SQLAlchemy metadata; persist volumes in Docker deployments.
+Each key press (or button) sends an event:
 
-## More documentation
-See `documentation.md` for the full guide covering architecture, security posture, dashboards, and operational tips. OpenAPI docs are available at `/docs` when the server is running.
+- `NEXT`: Starts a session and progresses the question counter
+- `PAUSE`: Toggles pause/resume state
+- `UNDO`: Removes the last question
+- `EXIT`: Closes the current session
 
-## License
+The backend computes timing stats per question and persists each session.
 
-MIT License. See `LICENSE` for details.
+---
 
+## 📺 Dashboards
+
+- `/dashboard/today` — View today’s sessions, timing, pace emojis, and scores
+- `/dashboard/sessions/<id>` — Inspect each question inside a session
+- `/profile` — Set your preferred timezone for local time display
+
+---
+
+## 🔑 Authentication
+
+- `/login` and `/register`: HTML-based login
+- `/auth/login` and `/auth/register`: API-style login (used by the widget)
+- `GET /me`: Verify session/token
+- JWT token stored in secure cookie + optional Authorization header
+
+---
+
+## 🔒 Security Posture
+
+- Rate limits for login, registration, and event ingestion
+- CSRF tokens for login/registration flows
+- Passwords hashed with bcrypt
+- Sessions cannot be created by non-NEXT events
+
+---
+
+## 🛠️ Admin Tools
+
+- `/admin/debug/user-sessions`: View session metadata
+- `/admin/debug/user-events/<id>`: View raw event timeline
+
+---
+
+## 🧪 Still To Do
+
+- [ ] Email verification & stronger password policy
+- [ ] Optional email/password login toggle
+- [ ] Widget UI toggle between compact and expanded states
+- [ ] Timezone auto-detection (fallback)
+- [ ] Export session data to CSV
+- [ ] Multitenancy / team support
+- [ ] More robust test coverage
+
+---
+
+## 📄 License
+
+MIT License. Open source, self-hostable, and free to use. See `LICENSE`.
+
+---
+Made with 💜 by [Melissa Steigenga](https://raterhub.steigenga.com)
