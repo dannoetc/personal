@@ -33,6 +33,92 @@ pip install -r ../requirements.txt
 uvicorn main:app --reload
 ```
 
+### CSV export smoke test (manual)
+
+You can quickly verify the CSV endpoints by running a short local smoke test:
+
+1. In one terminal, start the API with temporary settings:
+
+   ```bash
+   cd /workspace/personal
+   SECRET_KEY=devkey DEBUG=true uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+
+2. In a second terminal, seed a throwaway user and get a JWT token:
+
+   ```bash
+   SECRET_KEY=devkey python - <<'PY'
+from datetime import datetime
+from app.auth import create_access_token, get_password_hash
+from app.database import SessionLocal
+from app.db_models import PasswordHistory, User
+
+db = SessionLocal()
+email = "smoke@example.com"
+user = db.query(User).filter_by(email=email).first()
+if not user:
+    now = datetime.utcnow()
+    user = User(
+        external_id=email,
+        email=email,
+        first_name="Smoke",
+        last_name="Test",
+        created_at=now,
+        last_login_at=now,
+        password_hash=get_password_hash("password123!"),
+        auth_provider="local",
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
+    db.commit()
+
+print("JWT=" + create_access_token(user=user))
+db.close()
+PY
+   ```
+
+   Copy the printed `JWT` value for the next steps.
+
+3. Post a few events for today using that token (this example records a two-question session):
+
+   ```bash
+   python - <<'PY'
+import requests, time
+from datetime import datetime
+
+TOKEN = "<paste JWT here>"
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
+
+def send(event_type: str):
+    resp = requests.post(
+        "http://127.0.0.1:8000/events",
+        json={"type": event_type, "timestamp": datetime.utcnow().isoformat() + "Z"},
+        headers=HEADERS,
+    )
+    print(event_type, resp.status_code, resp.text)
+    resp.raise_for_status()
+
+send("NEXT")
+time.sleep(1)
+send("NEXT")
+time.sleep(1)
+send("EXIT")
+PY
+   ```
+
+4. Download CSV exports to verify responses (replace the dates if you run on a different day):
+
+   ```bash
+   TOKEN="<paste JWT here>"
+   curl -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:8000/reports/daily.csv?date=$(date -I)"
+   curl -H "Authorization: Bearer ${TOKEN}" "http://127.0.0.1:8000/reports/weekly.csv?week_start=$(date -I -d 'monday this week')"
+   ```
+
+5. Stop the uvicorn process with `Ctrl+C` when finished.
+
 ### Or with Docker:
 
 ```bash

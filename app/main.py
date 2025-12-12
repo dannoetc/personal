@@ -12,6 +12,7 @@ from fastapi import (
     Form,
     Cookie,
     Query,
+    Response,
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
@@ -1276,6 +1277,64 @@ def dashboard_today(
             "current_user_email": getattr(current_user, "email", None),
         },
     )
+
+# ============================================================
+# Report CSV exports
+# ============================================================
+
+
+@app.get("/reports/daily.csv")
+def download_daily_report(
+    date: str = Query(
+        ..., description="Date in YYYY-MM-DD (user's local timezone)",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+):
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+    from app.services.report_exports import daily_report_to_csv
+    from app.services.reporting import build_daily_report
+
+    report = build_daily_report(db, current_user.id, target_date)
+    csv_content = daily_report_to_csv(report)
+
+    filename = f"daily_report_{target_date.date().isoformat()}.csv"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    }
+
+    return Response(content=csv_content, media_type="text/csv; charset=utf-8", headers=headers)
+
+
+@app.get("/reports/weekly.csv")
+def download_weekly_report(
+    week_start: str = Query(
+        ..., description="Week start in YYYY-MM-DD (user's local timezone)",
+    ),
+    current_user: User = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+):
+    try:
+        start_date = datetime.strptime(week_start, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+
+    from app.services.report_exports import weekly_report_to_csv
+    from app.services.reporting import build_weekly_report
+
+    report = build_weekly_report(db, current_user.id, start_date)
+    csv_content = weekly_report_to_csv(report)
+
+    filename = f"weekly_report_{start_date.date().isoformat()}.csv"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    }
+
+    return Response(content=csv_content, media_type="text/csv; charset=utf-8", headers=headers)
 
 # ============================================================
 # Session / question delete (API & HTML)
