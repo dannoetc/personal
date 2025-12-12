@@ -412,8 +412,12 @@ def get_current_user(
     return user
 
 
+def is_admin_user(user: User) -> bool:
+    return getattr(user, "role", "user") == "admin"
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    if getattr(current_user, "role", "user") != "admin":
+    if not is_admin_user(current_user):
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return current_user
 
@@ -1070,6 +1074,7 @@ def dashboard_session(
             "request": request,
             "summary": summary,
             "current_user_email": getattr(current_user, "email", None),
+            "is_admin": is_admin_user(current_user),
         },
     )
 
@@ -1298,6 +1303,7 @@ def dashboard_today(
             "selected_date": selected_date_str,
             "user_timezone": getattr(current_user, "timezone", None),
             "current_user_email": getattr(current_user, "email", None),
+            "is_admin": is_admin_user(current_user),
         },
     )
 
@@ -1330,6 +1336,7 @@ def dashboard_reports(
             "selected_date": selected_date_str,
             "user_timezone": getattr(current_user, "timezone", None),
             "current_user_email": getattr(current_user, "email", None),
+            "is_admin": is_admin_user(current_user),
         },
     )
 
