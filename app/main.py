@@ -1445,15 +1445,6 @@ def download_daily_pdf(
         "Content-Disposition": f'attachment; filename="{filename}"'
     }
 
-    log_report_event(
-        db,
-        user_id=current_user.id,
-        report_scope="daily",
-        report_format="pdf",
-        report_date=target_date.date(),
-        triggered_by="user_download",
-    )
-
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 
 
@@ -1484,15 +1475,6 @@ def download_weekly_pdf(
     headers = {
         "Content-Disposition": f'attachment; filename="{filename}"'
     }
-
-    log_report_event(
-        db,
-        user_id=current_user.id,
-        report_scope="weekly",
-        report_format="pdf",
-        report_date=start_date.date(),
-        triggered_by="user_download",
-    )
 
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
 

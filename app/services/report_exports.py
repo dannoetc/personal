@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
+import logging
+
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.config import settings
@@ -18,24 +20,27 @@ env = Environment(
     autoescape=select_autoescape(["html", "xml"]),
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _weasyprint_render(html: str, *, base_url: str | None = None) -> bytes:
-    """
-    Render HTML to PDF bytes using WeasyPrint when available.
+    """Render HTML to PDF bytes using WeasyPrint when available.
 
-    We intentionally soft-fail when the optional dependency is missing (e.g.,
-    during offline development) and let the caller fall back to a simpler
-    renderer.
+    We fall back to the plain-text PDF builder only when WeasyPrint itself
+    cannot be imported. Any rendering errors should surface so environments
+    with the optional dependency installed do not silently degrade to the
+    text-only fallback.
     """
 
     try:
         from weasyprint import HTML  # type: ignore
-    except Exception:
+    except ModuleNotFoundError:
         return b""
 
     try:
         return HTML(string=html, base_url=base_url).write_pdf()
-    except Exception:
+    except Exception as exc:  # pragma: no cover - depends on optional dependency
+        logger.exception("WeasyPrint PDF rendering failed; falling back to text", exc_info=exc)
         return b""
 
 
@@ -115,11 +120,9 @@ def _render_template(name: str, context: dict) -> str:
 
 
 def _html_to_plain_text(html: str) -> str:
-    cleaned = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", "", html)
-    cleaned = re.sub(r"(?i)<br\s*/?>", "\n", cleaned)
+    cleaned = re.sub(r"(?i)<br\s*/?>", "\n", html)
     cleaned = re.sub(r"(?i)</(p|div|section|table|thead|tbody|tr|h[1-6])>", "\n", cleaned)
     cleaned = re.sub(r"<[^>]+>", "", cleaned)
-    cleaned = re.sub(r"[\t ]{2,}", " ", cleaned)
     cleaned = re.sub(r"\n{2,}", "\n", cleaned)
     return cleaned.strip()
 
