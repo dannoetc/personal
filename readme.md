@@ -1,6 +1,6 @@
 # 💜 RaterHub Tracker
 
-RaterHub Tracker is a lightweight, privacy-conscious time tracker designed specifically for Raters working on [RaterHub.com](https://www.raterhub.com). It helps track question timing and session activity using a browser widget and a FastAPI backend — no browser extensions or third-party logins required.
+RaterHub Tracker is a lightweight, privacy-conscious time tracker designed specifically for Raters working on [RaterHub.com](https://www.raterhub.com). It helps track question timing and session activity using a browser widget and a FastAPI backend, with a lightweight browser extension working things in the frontend! 
 
 ---
 
@@ -18,7 +18,7 @@ RaterHub Tracker is a lightweight, privacy-conscious time tracker designed speci
 
 - **Backend**: FastAPI + SQLAlchemy + PostgreSQL (or SQLite)
 - **Auth**: JWT Bearer tokens, CSRF, optional rate limiting (SlowAPI)
-- **Frontend**: TamperMonkey widget + Jinja2 HTML templates
+- **Frontend**: Browser Extension (code in /extension) + Jinja2 HTML templates
 - **Packaging**: Docker, `.env` support, Makefile for quick builds
 
 ---
