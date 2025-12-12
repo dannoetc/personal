@@ -163,14 +163,11 @@
   function applyCollapsedState() {
     if (!bodyContainer || !toggleBtn) return;
     if (isCollapsed) {
+      const computed = window.getComputedStyle(widget);
+      expandedMinHeight = widget.style.minHeight || computed.minHeight;
+      expandedHeight = widget.style.height || computed.height;
       bodyContainer.style.display = "none";
       toggleBtn.textContent = "▴";
-      if (!expandedMinHeight) {
-        expandedMinHeight = widget.style.minHeight;
-      }
-      if (!expandedHeight) {
-        expandedHeight = widget.style.height;
-      }
       widget.style.minHeight = "0";
       widget.style.height = "auto";
       if (collapsedTimerEl) {
@@ -229,16 +226,6 @@
     title.style.fontWeight = "700";
     title.style.fontSize = "13px";
     title.style.color = "#0f172a";
-
-    collapsedTimerEl = document.createElement("span");
-    collapsedTimerEl.textContent = "00:00";
-    collapsedTimerEl.style.fontSize = "11px";
-    collapsedTimerEl.style.fontWeight = "700";
-    collapsedTimerEl.style.color = "#4b5563";
-    collapsedTimerEl.style.display = "none";
-
-    titleWrapper.appendChild(title);
-    titleWrapper.appendChild(collapsedTimerEl);
 
     collapsedTimerEl = document.createElement("span");
     collapsedTimerEl.textContent = "00:00";
