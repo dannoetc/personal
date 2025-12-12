@@ -1,0 +1,9 @@
+date,session_count,total_active_seconds,total_raw_seconds,daily_pace_label,daily_pace_emoji
+2024-01-01,1,300.0,320.0,on target,💜✅
+2024-01-02,0,0.0,0.0,No questions,😴
+2024-01-03,1,180.0,240.0,slightly fast,🙂
+2024-01-04,0,0.0,0.0,No questions,😴
+2024-01-05,0,0.0,0.0,No questions,😴
+2024-01-06,0,0.0,0.0,No questions,😴
+2024-01-07,0,0.0,0.0,No questions,😴
+TOTAL,2,480.0,560.0,,
