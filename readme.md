@@ -154,6 +154,19 @@ source app/.venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+### Database migrations for email features
+
+If you are upgrading an existing deployment, run the lightweight migration to
+add the email-related audit table and user preference columns:
+
+```bash
+SECRET_KEY=... DATABASE_URL=... python scripts/add_report_email_tables.py
+```
+
+The script is idempotent and can be re-run safely; it only creates the
+`report_audit_logs` table and missing `users.timezone`/`users.wants_report_emails`
+columns when they are absent.
+
 ---
 
 ## 🔐 Environment Configuration (`.env`)
@@ -164,7 +177,24 @@ DATABASE_URL=postgresql+psycopg2://raterhub:super-secret@localhost:5432/raterhub
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 ALLOWED_ORIGINS=https://raterhub.com,https://api.raterhub.com
 DEBUG=false
+EMAIL_SENDING_ENABLED=false
+EMAIL_SMTP_HOST=smtp.yourmail.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_USERNAME=mailer
+EMAIL_SMTP_PASSWORD=super-secret
+EMAIL_FROM_ADDRESS=reports@example.com
 ```
+
+To deliver daily report emails at the start of each user's local day, schedule
+the cron-friendly task to run hourly:
+
+```bash
+python -m app.scripts.deliver_reports
+```
+
+When `EMAIL_SENDING_ENABLED` is `true`, active users who opt in from their
+profile will receive the previous day's PDF and CSV exports. Audit entries are
+recorded for each delivery attempt.
 
 ---
 
