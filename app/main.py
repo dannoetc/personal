@@ -1288,6 +1288,38 @@ def dashboard_today(
         },
     )
 
+
+@app.get("/dashboard/reports", response_class=HTMLResponse)
+def dashboard_reports(
+    request: Request,
+    date: Optional[str] = Query(
+        default=None,
+        description="Optional date in YYYY-MM-DD (user's local timezone). If omitted, uses today.",
+    ),
+    current_user: User = Depends(get_current_user),
+):
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format, use YYYY-MM-DD")
+    else:
+        tz = get_user_tz(current_user)
+        now_local = datetime.now(tz)
+        target_date = datetime(now_local.year, now_local.month, now_local.day)
+
+    selected_date_str = target_date.strftime("%Y-%m-%d") if target_date else ""
+
+    return templates.TemplateResponse(
+        "reports_dashboard.html",
+        {
+            "request": request,
+            "selected_date": selected_date_str,
+            "user_timezone": getattr(current_user, "timezone", None),
+            "current_user_email": getattr(current_user, "email", None),
+        },
+    )
+
 # ============================================================
 # Report CSV exports
 # ============================================================
