@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     Float,
     ForeignKey,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -22,6 +23,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
+    first_name = Column(String, nullable=True, default="")
+    last_name = Column(String, nullable=True, default="")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
@@ -40,6 +43,12 @@ class User(Base):
         "Session",
         back_populates="user",
         cascade="all, delete-orphan",
+    )
+    password_history = relationship(
+        "PasswordHistory",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="PasswordHistory.created_at.desc()",
     )
 
 
@@ -114,3 +123,27 @@ class Question(Base):
 
     # Relationships
     session = relationship("Session", back_populates="questions")
+
+
+class PasswordHistory(Base):
+    __tablename__ = "password_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="password_history")
+
+
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key_type = Column(String, nullable=False)  # "account" or "ip"
+    key_value = Column(String, nullable=False)
+    failure_count = Column(Integer, nullable=False, default=0)
+    last_failure_at = Column(DateTime, nullable=True)
+    locked_until = Column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("key_type", "key_value", name="uix_login_attempt_key"),)

@@ -1,3 +1,5 @@
+import hmac
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from zoneinfo import ZoneInfo
@@ -24,7 +26,15 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from .database import SessionLocal, engine
-from .db_models import Base, User, Session as DbSession, Event, Question
+from .db_models import (
+    Base,
+    User,
+    Session as DbSession,
+    Event,
+    Question,
+    PasswordHistory,
+    LoginAttempt,
+)
 from .models import (
     EventIn,
     EventOut,
@@ -43,6 +53,7 @@ from .auth import (
     verify_password,
     create_access_token,
     decode_access_token,
+    validate_password_policy,
 )
 from .config import settings
 
@@ -76,6 +87,90 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 security = HTTPBearer(auto_error=False)  # allow missing header, fallback to cookie
 
+CSRF_COOKIE_NAME = "csrf_token"
+CSRF_HEADER_NAME = "x-csrf-token"
+
+LOGIN_FAILURE_THRESHOLD = 5
+LOCKOUT_DURATION = timedelta(minutes=15)
+BACKOFF_AFTER_FAILURES = 3
+BACKOFF_STEP_SECONDS = 30
+
+
+def _csrf_signature(nonce: str, issued_at: int) -> str:
+    message = f"{nonce}:{issued_at}".encode()
+    return hmac.new(settings.SECRET_KEY.encode(), message, "sha256").hexdigest()
+
+
+def generate_csrf_token(now: Optional[datetime] = None) -> str:
+    now = now or datetime.now(timezone.utc)
+    issued_at = int(now.timestamp())
+    nonce = secrets.token_urlsafe(32)
+    signature = _csrf_signature(nonce, issued_at)
+    return f"{nonce}:{issued_at}:{signature}"
+
+
+def set_csrf_cookie(response, token: str):
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.SESSION_COOKIE_SECURE,
+        # TamperMonkey/userscript runs on raterhub.com and talks to api.raterhub.steigenga.com,
+        # so the CSRF cookie must be sent cross-site. SameSite=None enables that while
+        # keeping the cookie secure-only and httpOnly.
+        samesite="none",
+        max_age=60 * 60 * 24,
+    )
+
+
+def render_template_with_csrf(template_name: str, request: Request, context: dict):
+    token = generate_csrf_token()
+    merged_context = {"request": request, "csrf_token": token, **context}
+    response = templates.TemplateResponse(template_name, merged_context)
+    set_csrf_cookie(response, token)
+    return response
+
+
+def _is_valid_csrf_token_value(token: str, max_age_seconds: int = 60 * 60 * 24) -> bool:
+    parts = token.split(":")
+    if len(parts) != 3:
+        return False
+
+    nonce, issued_at_raw, signature = parts
+    try:
+        issued_at = int(issued_at_raw)
+    except ValueError:
+        return False
+
+    expected_signature = _csrf_signature(nonce, issued_at)
+    if not hmac.compare_digest(expected_signature, signature):
+        return False
+
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    if issued_at < now_ts - max_age_seconds:
+        return False
+
+    return True
+
+
+def validate_csrf(request: Request, provided_token: Optional[str]) -> bool:
+    if not provided_token or not _is_valid_csrf_token_value(provided_token):
+        return False
+
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    if cookie_token and not hmac.compare_digest(cookie_token, provided_token):
+        return False
+
+    return True
+
+
+@app.get("/auth/csrf")
+def issue_csrf_token(request: Request):
+    token = generate_csrf_token()
+    response = JSONResponse({"csrf_token": token})
+    set_csrf_cookie(response, token)
+    return response
+
 # ============================================================
 # DB dependency
 # ============================================================
@@ -86,6 +181,76 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def _client_ip(request: Request) -> str:
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _get_or_create_login_attempt(db: OrmSession, key_type: str, key_value: str) -> LoginAttempt:
+    attempt = (
+        db.query(LoginAttempt)
+        .filter(LoginAttempt.key_type == key_type, LoginAttempt.key_value == key_value)
+        .first()
+    )
+    if attempt is None:
+        attempt = LoginAttempt(key_type=key_type, key_value=key_value, failure_count=0)
+        db.add(attempt)
+        db.commit()
+        db.refresh(attempt)
+    return attempt
+
+
+def _get_login_attempts(db: OrmSession, email: str, ip_address: str) -> list[LoginAttempt]:
+    normalized_email = email.lower().strip()
+    return [
+        _get_or_create_login_attempt(db, "account", normalized_email),
+        _get_or_create_login_attempt(db, "ip", ip_address),
+    ]
+
+
+def _login_blocked_until(attempts: list[LoginAttempt], now: datetime) -> datetime | None:
+    blocked_until: datetime | None = None
+    for attempt in attempts:
+        if attempt.locked_until and attempt.locked_until > now:
+            blocked_until = max(blocked_until or attempt.locked_until, attempt.locked_until)
+            continue
+
+        if attempt.failure_count >= BACKOFF_AFTER_FAILURES and attempt.last_failure_at:
+            backoff_seconds = BACKOFF_STEP_SECONDS * (
+                attempt.failure_count - BACKOFF_AFTER_FAILURES + 1
+            )
+            cooldown_until = attempt.last_failure_at + timedelta(seconds=backoff_seconds)
+            if cooldown_until > now:
+                blocked_until = max(blocked_until or cooldown_until, cooldown_until)
+
+    return blocked_until
+
+
+def _record_login_failure(db: OrmSession, attempts: list[LoginAttempt], now: datetime):
+    for attempt in attempts:
+        attempt.failure_count += 1
+        attempt.last_failure_at = now
+        if attempt.failure_count >= LOGIN_FAILURE_THRESHOLD:
+            attempt.locked_until = now + LOCKOUT_DURATION
+        db.add(attempt)
+    db.commit()
+
+
+def _reset_login_attempts(db: OrmSession, attempts: list[LoginAttempt]):
+    any_changes = False
+    for attempt in attempts:
+        if attempt.failure_count or attempt.locked_until or attempt.last_failure_at:
+            attempt.failure_count = 0
+            attempt.locked_until = None
+            attempt.last_failure_at = None
+            db.add(attempt)
+            any_changes = True
+
+    if any_changes:
+        db.commit()
 
 # ============================================================
 # Utility helpers
@@ -269,14 +434,23 @@ def root(
 def register_api(
     request: Request, user_in: UserCreate, db: OrmSession = Depends(get_db)
 ):
+    if not validate_csrf(request, request.headers.get(CSRF_HEADER_NAME)):
+        raise HTTPException(status_code=400, detail="Invalid or missing CSRF token")
+
     exists = db.query(User).filter(User.email == user_in.email).first()
     if exists:
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    is_valid, message = validate_password_policy(user_in.password)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=message)
 
     now = datetime.utcnow()
     user = User(
         external_id=user_in.email,
         email=user_in.email,
+        first_name=(user_in.first_name or "").strip(),
+        last_name=(user_in.last_name or "").strip(),
         created_at=now,
         last_login_at=now,
         password_hash=get_password_hash(user_in.password),
@@ -287,20 +461,35 @@ def register_api(
     db.commit()
     db.refresh(user)
 
+    db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
+    db.commit()
+
     token = create_access_token(user=user)
     return Token(access_token=token)
 
 @limiter.limit("5/minute")
 @app.post("/auth/login", response_model=Token)
 def login_api(request: Request, user_in: UserLogin, db: OrmSession = Depends(get_db)):
+    if not validate_csrf(request, request.headers.get(CSRF_HEADER_NAME)):
+        raise HTTPException(status_code=400, detail="Invalid or missing CSRF token")
+
+    now = datetime.utcnow()
+    ip_address = _client_ip(request)
+    attempts = _get_login_attempts(db, user_in.email, ip_address)
+    blocked_until = _login_blocked_until(attempts, now)
+    if blocked_until:
+        raise HTTPException(
+            status_code=429, detail="Too many login attempts. Please try again later."
+        )
+
     user = db.query(User).filter(User.email == user_in.email).first()
-    if not user or not user.password_hash:
+    if not user or not user.password_hash or not verify_password(user_in.password, user.password_hash):
+        _record_login_failure(db, attempts, now)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    if not verify_password(user_in.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    _reset_login_attempts(db, attempts)
 
-    user.last_login_at = datetime.utcnow()
+    user.last_login_at = now
     db.commit()
 
     token = create_access_token(user=user)
@@ -312,23 +501,51 @@ def login_api(request: Request, user_in: UserLogin, db: OrmSession = Depends(get
 
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return render_template_with_csrf("login.html", request, {})
 
 
 @app.post("/login")
 def login_web(
     request: Request,
+    csrf_token: Optional[str] = Form(None),
     email: str = Form(...),
     password: str = Form(...),
     db: OrmSession = Depends(get_db),
 ):
+    if not validate_csrf(request, csrf_token):
+        response = render_template_with_csrf(
+            "login.html",
+            request,
+            {"error": "Invalid or missing CSRF token.", "email": email},
+        )
+        response.status_code = 400
+        return response
+
+    now = datetime.utcnow()
+    ip_address = _client_ip(request)
+    attempts = _get_login_attempts(db, email, ip_address)
+    blocked_until = _login_blocked_until(attempts, now)
+    if blocked_until:
+        response = render_template_with_csrf(
+            "login.html",
+            request,
+            {"error": "Too many login attempts. Please try again later.", "email": email},
+        )
+        response.status_code = 429
+        return response
+
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.password_hash or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
+        _record_login_failure(db, attempts, now)
+        response = render_template_with_csrf(
             "login.html",
-            {"request": request, "error": "Invalid email or password", "email": email},
-            status_code=400,
+            request,
+            {"error": "Invalid email or password", "email": email},
         )
+        response.status_code = 400
+        return response
+
+    _reset_login_attempts(db, attempts)
 
     token = create_access_token(user=user)
 
@@ -349,18 +566,22 @@ def register_form(request: Request):
     """
     Show a simple registration form for creating a local account.
     """
-    return templates.TemplateResponse(
+    return render_template_with_csrf(
         "register.html",
-        {"request": request},
+        request,
+        {},
     )
 
 
 @app.post("/register")
 def register_web(
     request: Request,
+    csrf_token: Optional[str] = Form(None),
     email: str = Form(...),
     password: str = Form(...),
     password_confirm: str = Form(...),
+    first_name: str = Form(""),
+    last_name: str = Form(""),
     db: OrmSession = Depends(get_db),
 ):
     """
@@ -369,33 +590,55 @@ def register_web(
     - Ensures email is not already registered
     - Creates user, logs them in, sets cookie
     """
-    if password != password_confirm:
-        return templates.TemplateResponse(
+    if not validate_csrf(request, csrf_token):
+        response = render_template_with_csrf(
             "register.html",
+            request,
             {
-                "request": request,
+                "error": "Invalid or missing CSRF token.",
+                "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
+            },
+        )
+        response.status_code = 400
+        return response
+
+    if password != password_confirm:
+        response = render_template_with_csrf(
+            "register.html",
+            request,
+            {
                 "error": "Passwords do not match.",
                 "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
             },
-            status_code=400,
         )
+        response.status_code = 400
+        return response
 
     existing = db.query(User).filter(User.email == email).first()
     if existing:
-        return templates.TemplateResponse(
+        response = render_template_with_csrf(
             "register.html",
+            request,
             {
-                "request": request,
                 "error": "That email is already registered.",
                 "email": email,
+                "first_name": first_name,
+                "last_name": last_name,
             },
-            status_code=400,
         )
+        response.status_code = 400
+        return response
 
     now = datetime.utcnow()
     user = User(
         external_id=email,
         email=email,
+        first_name=first_name.strip(),
+        last_name=last_name.strip(),
         created_at=now,
         last_login_at=now,
         password_hash=get_password_hash(password),
@@ -405,6 +648,9 @@ def register_web(
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
+    db.commit()
 
     token = create_access_token(user=user)
 
@@ -451,6 +697,8 @@ def me(current_user: User = Depends(get_current_user)):
         "id": current_user.id,
         "email": current_user.email,
         "external_id": current_user.external_id,
+        "first_name": getattr(current_user, "first_name", None),
+        "last_name": getattr(current_user, "last_name", None),
         "created_at": current_user.created_at,
         "last_login_at": current_user.last_login_at,
         "is_active": current_user.is_active,
@@ -836,10 +1084,17 @@ def build_day_summary(
         .all()
     )
 
-    hourly_activity = [0 for _ in range(24)]
+    hourly_activity = [
+        HourlyActivity(
+            hour=h,
+            total_questions=0,
+            active_seconds=0.0,
+            bucket_start=local_start + timedelta(hours=h),
+        )
+        for h in range(24)
+    ]
 
     if not sessions:
-        hourly_buckets = [0.0 for _ in range(24)]
         daily_pace = compute_pace(0.0, 0.0)
         return TodaySummary(
             date=local_start,  # report date as local midnight
@@ -879,7 +1134,9 @@ def build_day_summary(
                 continue
             if q_local_start < local_start or q_local_start >= local_end:
                 continue
-            hourly_activity[q_local_start.hour] += 1
+            bucket = hourly_activity[q_local_start.hour]
+            bucket.total_questions += 1
+            bucket.active_seconds += q.active_seconds or 0.0
 
         if not qs:
             items.append(
@@ -1282,16 +1539,81 @@ def admin_dashboard(
 # Profile (timezone, etc.)
 # ============================================================
 
+COMMON_TIMEZONES = [
+    "UTC",
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Los_Angeles",
+    "Europe/London",
+    "Europe/Amsterdam",
+    "Europe/Berlin",
+    "Asia/Kolkata",
+    "Asia/Singapore",
+    "Asia/Tokyo",
+    "Australia/Sydney",
+]
+
+
+def _format_timezone_option(tz_name: str):
+    try:
+        tz_info = ZoneInfo(tz_name)
+    except Exception:
+        return None
+
+    now = datetime.now(tz_info)
+    offset = now.utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds() // 60)
+    hours, minutes = divmod(abs(total_minutes), 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    label = f"UTC{sign}{hours:02d}:{minutes:02d}"
+    display_name = tz_name.replace("_", " ")
+
+    return {"value": tz_name, "label": f"{display_name} ({label})"}
+
+
+def _timezone_options(selected: Optional[str] = None):
+    options: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for tz_name in COMMON_TIMEZONES:
+        option = _format_timezone_option(tz_name)
+        if option:
+            options.append(option)
+            seen.add(tz_name)
+
+    if selected and selected not in seen:
+        fallback_option = _format_timezone_option(selected)
+        if fallback_option:
+            options.append(fallback_option)
+
+    return options
+
+
+def _coerce_timezone(tz_name: str, fallback: str = "UTC") -> str:
+    try:
+        ZoneInfo(tz_name)
+        return tz_name
+    except Exception:
+        try:
+            ZoneInfo(fallback)
+            return fallback
+        except Exception:
+            return "UTC"
+
+
 @app.get("/profile", response_class=HTMLResponse)
 def profile_form(
     request: Request,
     current_user: User = Depends(get_current_user),
 ):
-    return templates.TemplateResponse(
+    return render_template_with_csrf(
         "profile.html",
+        request,
         {
-            "request": request,
             "user": current_user,
+            "timezone_options": _timezone_options(current_user.timezone or "UTC"),
+            "selected_timezone": current_user.timezone or "UTC",
         },
     )
 
@@ -1299,26 +1621,87 @@ def profile_form(
 @app.post("/profile", response_class=HTMLResponse)
 def profile_update(
     request: Request,
-    timezone_name: str = Form(...),
+    form_type: str = Form(...),
+    csrf_token: Optional[str] = Form(None),
+    first_name: str = Form(""),
+    last_name: str = Form(""),
+    timezone_name: str = Form(""),
+    current_password: Optional[str] = Form(None),
+    new_password: Optional[str] = Form(None),
+    new_password_confirm: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
-    # Basic validation: must be a valid IANA timezone or fall back to UTC
-    try:
-        _ = ZoneInfo(timezone_name)
-        valid_tz = timezone_name
-    except Exception:
-        valid_tz = "UTC"
+    profile_message = None
+    profile_error = None
+    password_message = None
+    password_error = None
 
-    current_user.timezone = valid_tz
-    db.commit()
-    db.refresh(current_user)
+    if not validate_csrf(request, csrf_token):
+        profile_error = "Invalid or missing CSRF token."
+    elif form_type == "profile":
+        current_user.first_name = first_name.strip()
+        current_user.last_name = last_name.strip()
+        current_user.timezone = _coerce_timezone(
+            timezone_name or (current_user.timezone or "UTC")
+        )
 
-    return templates.TemplateResponse(
-        "profile.html",
-        {
-            "request": request,
-            "user": current_user,
-            "message": "Profile updated.",
-        },
-    )
+        db.commit()
+        db.refresh(current_user)
+        profile_message = "Profile updated."
+
+    elif form_type == "password":
+        if not current_user.password_hash:
+            password_error = "Password updates are unavailable for your account."
+        elif not current_password or not verify_password(
+            current_password, current_user.password_hash
+        ):
+            password_error = "Your current password is incorrect."
+        elif not new_password or not new_password_confirm:
+            password_error = "Please provide and confirm your new password."
+        elif new_password != new_password_confirm:
+            password_error = "New passwords do not match."
+        else:
+            recent_passwords = (
+                db.query(PasswordHistory)
+                .filter(PasswordHistory.user_id == current_user.id)
+                .order_by(PasswordHistory.created_at.desc())
+                .limit(5)
+                .all()
+            )
+            recent_hashes = [p.password_hash for p in recent_passwords]
+            is_valid, policy_error = validate_password_policy(
+                new_password, recent_hashes
+            )
+
+            if not is_valid:
+                password_error = policy_error
+            else:
+                new_hash = get_password_hash(new_password)
+                current_user.password_hash = new_hash
+                db.add(
+                    PasswordHistory(user_id=current_user.id, password_hash=new_hash)
+                )
+                db.commit()
+                db.refresh(current_user)
+                password_message = "Password updated successfully."
+    else:
+        profile_error = "Unknown form submission."
+
+    context = {
+        "request": request,
+        "user": current_user,
+        "timezone_options": _timezone_options(current_user.timezone or "UTC"),
+        "selected_timezone": current_user.timezone or "UTC",
+        "profile_message": profile_message,
+        "profile_error": profile_error,
+        "password_message": password_message,
+        "password_error": password_error,
+    }
+
+    response = render_template_with_csrf("profile.html", request, context)
+
+    if profile_error or password_error:
+        response.status_code = 400
+
+    return response
