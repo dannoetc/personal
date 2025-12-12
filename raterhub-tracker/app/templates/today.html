@@ -152,6 +152,11 @@
             margin-top: 14px;
         }
 
+        .sparkline-wrapper {
+            position: relative;
+            margin-top: 4px;
+        }
+
         .sparkline-col {
             flex: 1;
             border-radius: 6px;
@@ -159,10 +164,49 @@
             min-height: 4px;
         }
 
+        .sparkline-axis {
+            position: relative;
+            height: 30px;
+            margin-top: 10px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .sparkline-tick {
+            position: absolute;
+            top: -1px;
+            transform: translateX(-50%);
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 11px;
+            min-width: 26px;
+        }
+
+        .sparkline-tick-line {
+            width: 1px;
+            height: 6px;
+            background: var(--border-subtle);
+            margin: 0 auto 4px;
+        }
+
         .sparkline-caption {
             font-size: 11px;
             color: var(--text-muted);
             margin-top: 6px;
+        }
+
+        .sparkline-tooltip {
+            position: absolute;
+            padding: 6px 8px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+            font-size: 12px;
+            color: var(--text-main);
+            pointer-events: none;
+            transform: translate(-50%, -110%);
+            white-space: nowrap;
+            z-index: 10;
         }
 
         .section-title {
@@ -412,19 +456,30 @@
     </div>
 
     {% set hourly = summary.hourly_activity or [] %}
-    {% set max_bucket = (hourly | max) if hourly else 0 %}
+    {% set hourly_totals = hourly | map(attribute='total_questions') | list %}
+    {% set max_bucket = (hourly_totals | max) if hourly_totals else 0 %}
     <div class="wide-card">
         <div class="summary-label">Hourly Activity</div>
         <div class="summary-value" style="font-size: 18px; color: var(--text-muted); font-weight: 500;">
             Questions started each hour (local time)
         </div>
         {% if hourly and max_bucket > 0 %}
-            <div class="sparkline-grid large">
-                {% for count in hourly %}
-                    {% set scale = (count / max_bucket * 100) if max_bucket > 0 else 0 %}
-                    <div class="sparkline-col" style="height: {{ 10 + (scale * 0.9) }}%; opacity: {{ 0.3 + (0.7 * (scale / 100)) }};"></div>
-                {% endfor %}
+            <div class="sparkline-wrapper">
+                <div class="sparkline-grid large" id="sparkline-grid">
+                    {% for bucket in hourly %}
+                        {% set scale = (bucket.total_questions / max_bucket * 100) if max_bucket > 0 else 0 %}
+                        <div
+                            class="sparkline-col"
+                            data-hour="{{ bucket.hour }}"
+                            data-bucket-start="{{ bucket.bucket_start.isoformat() if bucket.bucket_start else '' }}"
+                            data-total-questions="{{ bucket.total_questions }}"
+                            style="height: {{ 10 + (scale * 0.9) }}%; opacity: {{ 0.3 + (0.7 * (scale / 100)) }};"
+                        ></div>
+                    {% endfor %}
+                </div>
+                <div class="sparkline-axis" id="sparkline-axis"></div>
             </div>
+            <div id="sparkline-tooltip" class="sparkline-tooltip" style="display: none;"></div>
             <div class="sparkline-caption">Peak hour shows as the tallest column</div>
         {% else %}
             <div class="sparkline-caption" style="margin-top: 8px;">No hourly activity yet today</div>
@@ -514,5 +569,111 @@
         </div>
     {% endif %}
 </div>
+
+<script>
+    (function() {
+        const tooltip = document.getElementById('sparkline-tooltip');
+        const axis = document.getElementById('sparkline-axis');
+        const grid = document.getElementById('sparkline-grid');
+        const columns = document.querySelectorAll('.sparkline-col');
+
+        if (!tooltip || !axis || !grid || !columns.length) return;
+
+        function formatLocalTime(isoString) {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        }
+
+        function updateTooltipPosition(event) {
+            tooltip.style.left = `${event.pageX}px`;
+            tooltip.style.top = `${event.pageY}px`;
+        }
+
+        function formatTickLabel(date) {
+            const hours = date.getHours();
+            const suffix = hours < 12 ? 'a' : 'p';
+            const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+            return `${hour12}${suffix}`;
+        }
+
+        function buildAxisTicks() {
+            const starts = Array.from(columns)
+                .map((col) => col.dataset.bucketStart)
+                .filter(Boolean)
+                .map((value) => new Date(value))
+                .filter((d) => !Number.isNaN(d.getTime()));
+
+            if (!starts.length) return;
+
+            const earliest = new Date(Math.min(...starts.map((d) => d.getTime())));
+            const dayStart = new Date(earliest);
+            dayStart.setHours(0, 0, 0, 0);
+
+            const dayEnd = new Date(dayStart);
+            dayEnd.setDate(dayEnd.getDate() + 1);
+            const msPerDay = dayEnd.getTime() - dayStart.getTime();
+
+            const gridWidth = grid.getBoundingClientRect().width || 0;
+            const desiredGap = 54;
+            const maxTicks = Math.max(2, Math.floor(gridWidth / desiredGap));
+            const candidates = [2, 3, 4, 6];
+            let chosenInterval = candidates[candidates.length - 1];
+
+            for (const candidate of candidates) {
+                const count = Math.floor(24 / candidate) + 1;
+                if (count <= maxTicks) {
+                    chosenInterval = candidate;
+                    break;
+                }
+            }
+
+            axis.innerHTML = '';
+
+            for (let hour = 0; hour <= 24; hour += chosenInterval) {
+                const tickTime = new Date(dayStart);
+                tickTime.setHours(hour, 0, 0, 0);
+                const percent = ((tickTime.getTime() - dayStart.getTime()) / msPerDay) * 100;
+
+                const tick = document.createElement('div');
+                tick.className = 'sparkline-tick';
+                tick.style.left = `${percent}%`;
+
+                const line = document.createElement('div');
+                line.className = 'sparkline-tick-line';
+
+                const label = document.createElement('div');
+                label.className = 'sparkline-tick-label';
+                label.textContent = formatTickLabel(tickTime);
+
+                tick.appendChild(line);
+                tick.appendChild(label);
+                axis.appendChild(tick);
+            }
+        }
+
+        buildAxisTicks();
+
+        columns.forEach((col) => {
+            col.addEventListener('mouseenter', (event) => {
+                const startIso = col.dataset.bucketStart || '';
+                const count = Number(col.dataset.totalQuestions || '0');
+                const timeLabel = formatLocalTime(startIso);
+
+                const countLabel = `${count} question${count === 1 ? '' : 's'}`;
+                tooltip.textContent = timeLabel ? `${timeLabel} · ${countLabel}` : countLabel;
+                tooltip.style.display = 'block';
+                updateTooltipPosition(event);
+            });
+
+            col.addEventListener('mousemove', updateTooltipPosition);
+
+            col.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+        });
+    })();
+</script>
 </body>
 </html>
